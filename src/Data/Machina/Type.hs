@@ -16,7 +16,7 @@ import Data.Profunctor
 import Control.Comonad
 import Prelude hiding (id, (.))
 import Data.Functor.Adjunction
-import Data.Foldable (toList)
+import Data.Foldable (toList, traverse_)
 
 -- | 'Machina w m a b' represents a general stream transducer which can:
 --
