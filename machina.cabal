@@ -22,4 +22,5 @@ library
   other-extensions:    BangPatterns, DeriveFunctor
   build-depends:       base == 4.*, comonad, profunctors, semigroupoids, reflection, bytestring, transformers, adjunctions
   hs-source-dirs:      src
+  ghc-options: -Wall
   default-language:    Haskell2010
