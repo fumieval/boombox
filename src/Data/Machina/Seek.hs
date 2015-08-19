@@ -29,11 +29,9 @@ type Transcriber i = Machina (Needle i)
 type Vinyl i m = Transcriber i m ()
 
 -- | Seek to an arbitrary position.
-seeks :: Monad m => (i -> Maybe i) -> Transcriber i m a b -> Transcriber i m a b
+seeks :: Functor m => (i -> Maybe i) -> Transcriber i m a b -> Transcriber i m a b
 seeks t (Yield _ (Needle i f k)) = maybe k f (t i)
-seeks t (Await f) = Await (seeks t . f)
-seeks t (Past (Needle i f k)) = maybe k f (t i)
-seeks t (Future m) = Future (fmap (seeks t) m)
+seeks t (Await f) = Await (fmap (seeks t) . f)
 
 newtype Stepper s a = Stepper { getStepper :: a } deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
