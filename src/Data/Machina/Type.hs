@@ -22,7 +22,6 @@ import Data.Foldable (toList, traverse_)
 --
 -- * Consume a stream of input values @a@, making a future 'Machina' on the world @m@.
 -- * Produce a stream of output values @b@, providing option for next 'Machina' represented by the co-world @w@.
--- * Stay at the present.
 data Machina w m a b = Yield [b] (w (Machina w m a b))
   | Await ([a] -> m (Machina w m a b))
   deriving (Functor)
