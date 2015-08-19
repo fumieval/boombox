@@ -1,7 +1,8 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, DeriveFunctor #-}
 module Data.Machina.Type (Machina(..)
   , echo
-  , (>->)
+  , (>-|>)
+  , (>..>)
   , foldMapping
   , Chronological(..)
   , EventOrder(..)
@@ -32,13 +33,32 @@ data Machina w m a b = Yield [b] (w (Machina w m a b))
 echo :: (Genesis w, Applicative m) => Machina w m a a
 echo = creation $ \k -> Await $ \a -> pure $ Yield a k
 
-(>->) :: (Functor w, Functor m, Adjunction f g) => Machina g m a b -> Machina w f b c -> Machina w m a c
-Yield a w >-> Await f = rightAdjunct (\m -> fmap (>->m) w) (f a)
-Await f >-> k = Await (fmap (>->k) . f)
-k >-> Yield a w = Yield a (fmap (k>->) w)
+connectWith :: (Functor w, Functor m, Functor f, Functor g)
+  => (f (g (Machina w m a c)) -> Machina w m a c)
+  -> Machina w f b c
+  -> Machina g m a b
+  -> Machina w m a c
+connectWith t = go where
+  go (Await f) (Yield b w) = t $ fmap (\m -> fmap (go m) w) (f b)
+  go (Yield c w) k = Yield c (fmap (`go`k) w)
+  go k (Await f) = Await (fmap (go k) . f)
+
+(>-|>) :: (Functor w, Functor m, Adjunction f g) => Machina g m a b -> Machina w f b c -> Machina w m a c
+f >-|> g = connectWith counit g f
+
+(>..>) :: (Functor w, Functor m) => Machina w m a b -> Machina w m b c -> Machina w m a c
+f >..> g = connectWith (\mw -> Await $ \a -> fmap (Yield [] . fmap (supply a)) mw) g f
+
+supply :: (Functor w, Functor m) => [a] -> Machina w m a b -> Machina w m a b
+supply a (Await f) = Await $ \a' -> f (a ++ a') 
+supply a (Yield b w) = Yield b (fmap (supply a) w)
 
 foldMapping :: (Genesis w, Foldable f, Applicative m) => (a -> f b) -> Machina w m a b
 foldMapping f = creation $ \k -> Await $ \a -> pure $ Yield (a >>= toList . f) k
+
+instance (Genesis w, Applicative m) => Category (Machina w m) where
+  id = echo
+  (.) = connectWith (\mw -> Await $ \a -> fmap (Yield [] . fmap (supply a)) mw)
 
 instance (Functor w, Functor m) => Profunctor (Machina w m) where
   dimap f g = go where
