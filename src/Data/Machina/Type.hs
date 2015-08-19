@@ -2,7 +2,7 @@
 module Data.Machina.Type (Machina(..)
   , echo
   , (>-|>)
-  , (>..>)
+  , (>->)
   , foldMapping
   , Chronological(..)
   , EventOrder(..)
@@ -47,8 +47,10 @@ connectWith t = go where
 (>-|>) :: (Functor w, Functor m, Adjunction f g) => Machina g m a b -> Machina w f b c -> Machina w m a c
 f >-|> g = connectWith counit g f
 
-(>..>) :: (Functor w, Functor m) => Machina w m a b -> Machina w m b c -> Machina w m a c
-f >..> g = connectWith (\mw -> Await $ \a -> fmap (Yield [] . fmap (supply a)) mw) g f
+(>->) :: (Functor w, Functor m) => Machina w m a b -> Machina w m b c -> Machina w m a c
+m >-> Yield c w = Yield c (fmap (m>->) w)
+Await f >-> k = Await (fmap (>->k) . f)
+Yield b w >-> k = Yield [] (fmap (>->supply b k) w)
 
 supply :: (Functor w, Functor m) => [a] -> Machina w m a b -> Machina w m a b
 supply a (Await f) = Await $ \a' -> f (a ++ a') 
@@ -59,7 +61,7 @@ foldMapping f = creation $ \k -> Await $ \a -> pure $ Yield (a >>= toList . f) k
 
 instance (Genesis w, Applicative m) => Category (Machina w m) where
   id = echo
-  (.) = connectWith (\mw -> Await $ \a -> fmap (Yield [] . fmap (supply a)) mw)
+  (.) = flip (>->)
 
 instance (Functor w, Functor m) => Profunctor (Machina w m) where
   dimap f g = go where
