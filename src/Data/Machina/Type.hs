@@ -16,6 +16,7 @@ import Data.Functor.Identity
 import Data.Profunctor
 import Prelude hiding (id, (.))
 import Data.Functor.Adjunction
+import Data.Functor.Rep
 import Data.Foldable (toList)
 import Control.Comonad.Env
 import Control.Comonad.Store
@@ -78,7 +79,7 @@ instance Chronological Identity where
   coincidence (Identity a) (Identity b) = Simultaneous (Identity (a, b))
 
 instance Chronological ((->) i) where
-  coincidence f g = Simultaneous $ \x -> (f x, g x)
+  coincidence f g = Simultaneous $ mzipRep f g
 
 instance Ord i => Chronological ((,) i) where
   coincidence (i, a) (j, b) = case compare i j of
@@ -94,12 +95,12 @@ instance (Ord i, Chronological w) => Chronological (EnvT i w) where
 
 instance (Ord i, Chronological w) => Chronological (StoreT i w) where
   coincidence (StoreT v i) (StoreT w j) = case compare i j of
-    EQ -> (\wfg -> StoreT (fmap (\(f, g) x -> (f x, g x)) wfg) i) <$> coincidence v w
+    EQ -> (\wfg -> StoreT (fmap (uncurry mzipRep) wfg) i) <$> coincidence v w
     LT -> LeftFirst
     GT -> RightFirst
 
 instance Chronological w => Chronological (TracedT m w) where
-  coincidence (TracedT v) (TracedT w) = fmap (TracedT . fmap (\(f, g) x -> (f x, g x))) $ coincidence v w
+  coincidence (TracedT v) (TracedT w) = fmap (TracedT . fmap (uncurry mzipRep)) $ coincidence v w
 
 instance (Chronological w, Functor m) => Apply (Machina w m a) where
   Yield f0 s0 <.> Yield a0 t0 = Yield (f0 <*> a0) $ case coincidence s0 t0 of
