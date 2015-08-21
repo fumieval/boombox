@@ -2,12 +2,14 @@
 {-# LANGUAGE Rank2Types, ScopedTypeVariables #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
-module Data.Machina.Type (Machina(..)
-  , fastforward
+module Data.Boombox.Tape (Tape(..)
   , Chronological(..)
   , EventOrder(..)
   , Genesis(..)
-  , Stepper(..)) where
+  , Stepper(..)
+  , Needle(..)
+  , Vinyl
+  , seekVinyl) where
 
 import Control.Category
 import Control.Applicative
@@ -18,22 +20,12 @@ import Prelude hiding (id, (.))
 import Control.Comonad.Env
 import Control.Comonad.Store
 import Control.Comonad.Traced hiding (Alt)
-import Data.Foldable (traverse_)
 import Data.Reflection
 import Data.Proxy
 
-data Machina w m a = Yield [a] (w (Machina w m a))
-  | Effect (m (Machina w m a))
+data Tape w m a = Yield [a] (w (Tape w m a))
+  | Effect (m (Tape w m a))
   deriving (Functor)
-
-fastforward :: (Comonad w, Monad n)
-  => (forall x. m x -> n x)
-  -> (a -> n b)
-  -> Machina w m a
-  -> n r
-fastforward t k = go where
-  go (Yield a w) = traverse_ k a >> go (extract w)
-  go (Effect m) = t m >>= go
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where
@@ -71,7 +63,7 @@ instance (Ord i, Chronological w) => Chronological (StoreT i w) where
 instance Chronological w => Chronological (TracedT m w) where
   coincidence (TracedT v) (TracedT w) = fmap (TracedT . fmap (uncurry $ liftA2 (,))) $ coincidence v w
 
-instance (Chronological w, Functor m) => Apply (Machina w m) where
+instance (Chronological w, Functor m) => Apply (Tape w m) where
   Yield f0 s0 <.> Yield a0 t0 = Yield (f0 <*> a0) $ case coincidence s0 t0 of
     Simultaneous u -> fmap (uncurry (<.>)) u
     LeftFirst -> fmap (bleep a0 t0) s0
@@ -93,7 +85,7 @@ instance (Chronological w, Functor m) => Apply (Machina w m) where
   Effect m <.> t = Effect (fmap (<.>t) m)
   s <.> Effect m = Effect (fmap (s<.>) m)
 
-instance (Chronological w, Functor m) => Alt (Machina w m) where
+instance (Chronological w, Functor m) => Alt (Tape w m) where
   Yield a v <!> Yield b w = case coincidence v w of
     Simultaneous u -> Yield (a ++ b) $ fmap (uncurry (<!>)) u
     LeftFirst -> Yield a $ fmap (<!> Yield b w) v
@@ -121,10 +113,34 @@ instance (Ord a, Reifies s (a -> a, a)) => Genesis ((,) (Stepper s a)) where
     go a = k (Stepper a, go (f a))
     (f, a0) = reflect (Proxy :: Proxy s)
 
-instance (Genesis w, Applicative m) => Applicative (Machina w m) where
+instance (Genesis w, Applicative m) => Applicative (Tape w m) where
   pure a = creation $ Yield [a]
   (<*>) = (<.>)
 
-instance (Genesis w, Applicative m) => Alternative (Machina w m) where
+instance (Genesis w, Applicative m) => Alternative (Tape w m) where
   empty = creation $ Yield []
   (<|>) = (<!>)
+
+data Needle i a = Needle !i (Maybe i -> a) deriving Functor
+
+instance Comonad (Needle i) where
+  extract (Needle _ f) = f Nothing
+  extend k (Needle i f) = Needle i $ \m -> k $ Needle (maybe i id m) f
+
+instance Ord i => Chronological (Needle i) where
+  coincidence (Needle i f) (Needle j g) = case compare i j of
+    EQ -> Simultaneous (Needle i (liftA2 (,) f g))
+    LT -> LeftFirst
+    GT -> RightFirst
+
+instance (Ord a, Reifies s (a -> a, a)) => Genesis (Needle (Stepper s a)) where
+  creation k = go a0 where
+    go a = k $ Needle (Stepper a) (maybe (go (f a)) (go . getStepper))
+    (f, a0) = reflect (Proxy :: Proxy s)
+
+type Vinyl i m = Tape (Needle i) m
+
+-- | Seek to an arbitrary position.
+seekVinyl :: Functor m => (i -> Maybe i) -> Vinyl i m a -> Vinyl i m a
+seekVinyl t (Yield _ (Needle i f)) = f (t i)
+seekVinyl t (Effect f) = Effect (fmap (seekVinyl t) f)
