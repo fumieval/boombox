@@ -3,14 +3,12 @@ import Data.Boombox.Tape
 import Data.Boombox.Player
 import Control.Comonad
 
-($$) :: (Comonad w, Monad m)
+decodeTape :: (Comonad w, Monad m)
   => Tape w m s
   -> Decoder e s m a
   -> m (Tape w m s, [s], Either e a)
-s0 $$ t0 = go s0 t0 where
-  go (Effect m) d = m >>= \t -> go t d
-  go (Yield s wcont) d = pour (extract wcont) s d
-
+decodeTape (Effect m) d = m >>= \t -> go t d
+decodeTape (Yield s wcont) d = pour (extract wcont) s d where
   pour t (x:xs) (Partial f) = pour t xs (f x)
   pour t [] p = go t p
   pour t xs (Eff m) = m >>= pour t xs
@@ -39,3 +37,6 @@ Transcoder s0 >-> Transcoder t0 = Transcoder (go s0 [] t0) where
   downstream _ _ (Failed e) = Failed e
   downstream (Yield b wcont) [] p = downstream (extract wcont) b p
   downstream (Effect m) [] p = upstream (Effect p) [] m
+
+-- (>-$) :: Transcoder w a b m e -> Decoder e b m r -> Decoder e a m r
+-- (@->) :: Tape w m a -> Transcoder w a b m Void -> Tape w m b
