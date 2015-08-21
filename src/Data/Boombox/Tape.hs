@@ -113,11 +113,11 @@ instance (Ord a, Reifies s (a -> a, a)) => Genesis ((,) (Stepper s a)) where
     go a = k (Stepper a, go (f a))
     (f, a0) = reflect (Proxy :: Proxy s)
 
-instance (Genesis w, Applicative m) => Applicative (Tape w m) where
+instance (Genesis w, Functor m) => Applicative (Tape w m) where
   pure a = creation $ Yield [a]
   (<*>) = (<.>)
 
-instance (Genesis w, Applicative m) => Alternative (Tape w m) where
+instance (Genesis w, Functor m) => Alternative (Tape w m) where
   empty = creation $ Yield []
   (<|>) = (<!>)
 
