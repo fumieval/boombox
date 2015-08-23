@@ -1,4 +1,4 @@
-module Data.Boombox (($$), Transcoder(..), (>->)) where
+module Data.Boombox (decodeTape, Transcoder(..), (>->)) where
 import Data.Boombox.Tape
 import Data.Boombox.Player
 import Control.Comonad
@@ -7,12 +7,12 @@ decodeTape :: (Comonad w, Monad m)
   => Tape w m s
   -> Decoder e s m a
   -> m (Tape w m s, [s], Either e a)
-decodeTape (Effect m) d = m >>= \t -> go t d
+decodeTape (Effect m) d = m >>= (`decodeTape` d)
 decodeTape (Yield s wcont) d = pour (extract wcont) s d where
   pour t (x:xs) (Partial f) = pour t xs (f x)
-  pour t [] p = go t p
+  pour t [] p = decodeTape t p
   pour t xs (Eff m) = m >>= pour t xs
-  pour t xs (Done s a) = return (t, xs ++ s, Right a)
+  pour t xs (Done ss a) = return (t, ss ++ xs, Right a)
   pour t xs (Failed e) = return (t, xs, Left e)
 
 newtype Transcoder w a b m r = Transcoder { unTranscoder :: Tape w (Decoder r a m) b }
@@ -24,7 +24,7 @@ newtype Transcoder w a b m r = Transcoder { unTranscoder :: Tape w (Decoder r a 
 Transcoder s0 >-> Transcoder t0 = Transcoder (go s0 [] t0) where
   go (Effect m) xs t = Effect $ upstream t xs m
   go t xs (Yield c w) = Yield c $ fmap (go t xs) w
-  go (Yield b wcont) xs (Effect m) = Effect $ downstream (extract wcont) (xs ++ b) m
+  go (Yield b wcont) xs (Effect m) = Effect $ downstream (extract wcont) (b ++ xs) m
 
   upstream cont xs (Partial f) = Partial $ \s -> upstream cont xs (f s)
   upstream cont xs (Done ss t) = Done ss $ go t xs cont
@@ -33,7 +33,7 @@ Transcoder s0 >-> Transcoder t0 = Transcoder (go s0 [] t0) where
 
   downstream cont (x:xs) (Partial f) = downstream cont xs (f x)
   downstream cont xs (Eff m) = Eff $ fmap (downstream cont xs) m
-  downstream cont xs (Done ss t) = Done [] $ go cont (xs ++ ss) t
+  downstream cont xs (Done ss t) = Done [] $ go cont (ss ++ xs) t
   downstream _ _ (Failed e) = Failed e
   downstream (Yield b wcont) [] p = downstream (extract wcont) b p
   downstream (Effect m) [] p = upstream (Effect p) [] m

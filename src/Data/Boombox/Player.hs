@@ -11,6 +11,13 @@ data Decoder e s m a = Done [s] a
   | Eff (m (Decoder e s m a))
   deriving Functor
 
+unDecoder :: Monad m => ([s] -> a -> m r) -> ((s -> m r) -> m r) -> (e -> m r) -> Decoder e s m a -> m r
+unDecoder done part failed = go where
+  go (Done s a) = done s a
+  go (Partial f) = part $ go . f
+  go (Failed e) = failed e
+  go (Eff m) = m >>= go
+
 newtype PlayerT e s m a = PlayerT { unPlayerT :: forall r. s -> (s -> a -> Decoder e s m r) -> Decoder e s m r }
 
 instance Functor (PlayerT e s m) where
@@ -36,7 +43,12 @@ instance (Monoid e, Functor m) => Alternative (PlayerT e s m) where
     go _ (Done s a) _ = Done s a
     go ss (Partial f) t = Partial $ \s -> go (s : ss) (f s) t
     go ss (Eff m) t = Eff $ fmap (go ss `flip` t) m
-    go ss (Failed e) t = supplyDecoder (reverse ss) t
+    go ss (Failed e) t = run e (reverse ss) t
+    run e _ (Failed f) = Failed (mappend e f)
+    run e (x:xs) (Partial f) = run e xs (f x)
+    run e [] (Partial f) = Partial (run e [] . f)
+    run e xs (Eff m) = Eff $ fmap (run e xs) m
+    run _ xs (Done s a) = Done (s ++ xs) a
 
 runPlayerT :: PlayerT e s m a -> Decoder e s m a
 runPlayerT m = Partial $ \i -> unPlayerT m i (Done . pure)
