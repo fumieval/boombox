@@ -1,4 +1,4 @@
-module Data.Boombox (decodeTape, Transcoder(..), (>->)) where
+module Data.Boombox (decodeTape, Transcoder(..), (>->), module Data.Boombox.Tape, module Data.Boombox.Player) where
 import Data.Boombox.Tape
 import Data.Boombox.Player
 import Control.Comonad

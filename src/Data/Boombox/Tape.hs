@@ -28,7 +28,7 @@ data Tape w m a = Yield [a] (w (Tape w m a))
   | Effect (m (Tape w m a))
   deriving (Functor)
 
-headTape :: (Monad m) => Tape w m a -> m [a]
+headTape :: Monad m => Tape w m a -> m [a]
 headTape (Yield a _) = return a
 headTape (Effect m) = m >>= headTape
 
