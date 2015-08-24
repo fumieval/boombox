@@ -4,14 +4,15 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Applicative
 import Data.Semigroup
+import Data.List
 
-data Decoder e s m a = Done [s] a
+data Decoder e s m a = Done s a
   | Partial (s -> Decoder e s m a)
   | Failed !e
   | Eff (m (Decoder e s m a))
   deriving Functor
 
-unDecoder :: Monad m => ([s] -> a -> m r) -> ((s -> m r) -> m r) -> (e -> m r) -> Decoder e s m a -> m r
+unDecoder :: Monad m => (s -> a -> m r) -> ((s -> m r) -> m r) -> (e -> m r) -> Decoder e s m a -> m r
 unDecoder done part failed = go where
   go (Done s a) = done s a
   go (Partial f) = part $ go . f
@@ -37,7 +38,7 @@ instance MonadTrans (PlayerT e s) where
 failPlayer :: e -> PlayerT e s m a
 failPlayer e = PlayerT $ \_ _ -> Failed e
 
-instance (Monoid e, Functor m) => Alternative (PlayerT e s m) where
+instance (Monoid e, Semigroup s, Functor m) => Alternative (PlayerT e s m) where
   empty = failPlayer mempty
   p <|> q = PlayerT $ \s cont -> go [] (unPlayerT p s cont) (unPlayerT q s cont) where
     go _ (Done s a) _ = Done s a
@@ -48,10 +49,10 @@ instance (Monoid e, Functor m) => Alternative (PlayerT e s m) where
     run e (x:xs) (Partial f) = run e xs (f x)
     run e [] (Partial f) = Partial (run e [] . f)
     run e xs (Eff m) = Eff $ fmap (run e xs) m
-    run _ xs (Done s a) = Done (s ++ xs) a
+    run _ xs (Done s a) = Done (foldl' (<>) s xs) a
 
 runPlayerT :: PlayerT e s m a -> Decoder e s m a
-runPlayerT m = Partial $ \i -> unPlayerT m i (Done . pure)
+runPlayerT m = Partial $ \i -> unPlayerT m i Done
 
 consuming :: (Semigroup s, Functor m)
   => (s -> m (Maybe (a, s)))
