@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
 module Data.Boombox.Tape (Tape(..)
+  , headTape
   , Chronological(..)
   , EventOrder(..)
   , Genesis(..)
@@ -26,6 +27,10 @@ import Data.Proxy
 data Tape w m a = Yield [a] (w (Tape w m a))
   | Effect (m (Tape w m a))
   deriving (Functor)
+
+headTape :: (Monad m) => Tape w m a -> m [a]
+headTape (Yield a _) = return a
+headTape (Effect m) = m >>= headTape
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where
