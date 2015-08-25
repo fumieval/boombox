@@ -15,20 +15,20 @@ module Data.Boombox.Tape (Tape(..)
 import Control.Category
 import Control.Applicative
 import Data.Functor.Apply
-import Data.Functor.Alt
 import Data.Functor.Identity
 import Prelude hiding (id, (.))
 import Control.Comonad.Env
 import Control.Comonad.Store
-import Control.Comonad.Traced hiding (Alt)
+import Control.Comonad.Traced hiding ((<>))
 import Data.Reflection
 import Data.Proxy
+import Data.Semigroup
 
-data Tape w m a = Yield [a] (w (Tape w m a))
+data Tape w m a = Yield a (w (Tape w m a))
   | Effect (m (Tape w m a))
   deriving (Functor)
 
-headTape :: Monad m => Tape w m a -> m [a]
+headTape :: Monad m => Tape w m a -> m a
 headTape (Yield a _) = return a
 headTape (Effect m) = m >>= headTape
 
@@ -69,19 +69,19 @@ instance Chronological w => Chronological (TracedT m w) where
   coincidence (TracedT v) (TracedT w) = fmap (TracedT . fmap (uncurry $ liftA2 (,))) $ coincidence v w
 
 instance (Chronological w, Functor m) => Apply (Tape w m) where
-  Yield f0 s0 <.> Yield a0 t0 = Yield (f0 <*> a0) $ case coincidence s0 t0 of
+  Yield f0 s0 <.> Yield a0 t0 = Yield (f0 a0) $ case coincidence s0 t0 of
     Simultaneous u -> fmap (uncurry (<.>)) u
     LeftFirst -> fmap (bleep a0 t0) s0
     RightFirst -> fmap (bloop f0 s0) t0
     where
       bleep a t = go where
-        go (Yield f' s') = Yield (f' <*> a) $ case coincidence s' t of
+        go (Yield f' s') = Yield (f' a) $ case coincidence s' t of
           Simultaneous u -> fmap (uncurry (<.>)) u
           LeftFirst -> fmap go s'
           RightFirst -> fmap (bloop f' s') t
         go (Effect m) = Effect (fmap go m)
       bloop f s = go where
-        go (Yield a' t') = Yield (f <*> a') $ case coincidence s t' of
+        go (Yield a' t') = Yield (f a') $ case coincidence s t' of
           Simultaneous u -> fmap (uncurry (<.>)) u
           LeftFirst -> fmap (bleep a' t') s
           RightFirst -> fmap go t'
@@ -90,13 +90,17 @@ instance (Chronological w, Functor m) => Apply (Tape w m) where
   Effect m <.> t = Effect (fmap (<.>t) m)
   s <.> Effect m = Effect (fmap (s<.>) m)
 
-instance (Chronological w, Functor m) => Alt (Tape w m) where
-  Yield a v <!> Yield b w = case coincidence v w of
-    Simultaneous u -> Yield (a ++ b) $ fmap (uncurry (<!>)) u
-    LeftFirst -> Yield a $ fmap (<!> Yield b w) v
-    RightFirst -> Yield b $ fmap (Yield a v <!>) w
-  Effect m <!> n = Effect (fmap (<!>n) m)
-  m <!> Effect n = Effect (fmap (m<!>) n)
+instance (Chronological w, Functor m, Semigroup a) => Semigroup (Tape w m a) where
+  Yield a v <> Yield b w = case coincidence v w of
+    Simultaneous u -> Yield (a <> b) $ fmap (uncurry (<>)) u
+    LeftFirst -> Yield a $ fmap (<> Yield b w) v
+    RightFirst -> Yield b $ fmap (Yield a v <>) w
+  Effect m <> n = Effect (fmap (<>n) m)
+  m <> Effect n = Effect (fmap (m<>) n)
+
+instance (Genesis w, Functor m, Monoid a, Semigroup a) => Monoid (Tape w m a) where
+  mempty = creation $ Yield mempty
+  mappend = (<>)
 
 -- | The class of functors which have their own time series.
 class Chronological f => Genesis f where
@@ -119,12 +123,8 @@ instance (Ord a, Reifies s (a -> a, a)) => Genesis ((,) (Stepper s a)) where
     (f, a0) = reflect (Proxy :: Proxy s)
 
 instance (Genesis w, Functor m) => Applicative (Tape w m) where
-  pure a = creation $ Yield [a]
+  pure a = creation $ Yield a
   (<*>) = (<.>)
-
-instance (Genesis w, Functor m) => Alternative (Tape w m) where
-  empty = creation $ Yield []
-  (<|>) = (<!>)
 
 data Needle i a = Needle !i (Maybe i -> a) deriving Functor
 
