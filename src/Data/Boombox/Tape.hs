@@ -10,8 +10,8 @@ module Data.Boombox.Tape (Tape(..)
   , Genesis(..)
   , Stepper(..)
   , Needle(..)
-  , Vinyl
-  , seekVinyl) where
+  , Reel
+  , seekReel) where
 
 import Control.Category
 import Control.Applicative
@@ -148,9 +148,9 @@ instance (Ord a, Reifies s (a -> a, a)) => Genesis (Needle (Stepper s a)) where
     go a = k $ Needle (Stepper a) (maybe (go (f a)) (go . getStepper))
     (f, a0) = reflect (Proxy :: Proxy s)
 
-type Vinyl i m = Tape (Needle i) m
+type Reel i m = Tape (Needle i) m
 
 -- | Seek to an arbitrary position.
-seekVinyl :: Functor m => (i -> Maybe i) -> Vinyl i m a -> Vinyl i m a
-seekVinyl t (Yield _ (Needle i f)) = f (t i)
-seekVinyl t (Effect f) = Effect (fmap (seekVinyl t) f)
+seekReel :: Functor m => (i -> Maybe i) -> Reel i m a -> Reel i m a
+seekReel t (Yield _ (Needle i f)) = f (t i)
+seekReel t (Effect f) = Effect (fmap (seekReel t) f)
