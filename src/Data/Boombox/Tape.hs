@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
 module Data.Boombox.Tape (Tape(..)
   , headTape
+  , flattenTape
   , Chronological(..)
   , EventOrder(..)
   , Genesis(..)
@@ -31,6 +32,10 @@ data Tape w m a = Yield a (w (Tape w m a))
 headTape :: Monad m => Tape w m a -> m a
 headTape (Yield a _) = return a
 headTape (Effect m) = m >>= headTape
+
+flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
+flattenTape (Yield f w) = extract $ foldr (extend . Yield) (fmap flattenTape w) f
+flattenTape (Effect m) = Effect (fmap flattenTape m)
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where
