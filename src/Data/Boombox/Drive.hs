@@ -1,31 +1,31 @@
 {-# LANGUAGE Rank2Types, LambdaCase, BangPatterns, DeriveFunctor #-}
-module Data.Boombox.Player where
+module Data.Boombox.Drive where
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Applicative
 import Data.Semigroup
 
-data Decoder e s m a = Done [s] a
-  | Partial (s -> Decoder e s m a)
+data Drive e s m a = Done [s] a
+  | Partial (s -> Drive e s m a)
   | Failed [s] !e
-  | Eff (m (Decoder e s m a))
+  | Eff (m (Drive e s m a))
   deriving Functor
 
-unDecoder :: Monad m => ([s] -> a -> m r) -> ((s -> m r) -> m r) -> ([s] -> e -> m r) -> Decoder e s m a -> m r
-unDecoder done part failed = go where
+unDrive :: Monad m => ([s] -> a -> m r) -> ((s -> m r) -> m r) -> ([s] -> e -> m r) -> Drive e s m a -> m r
+unDrive done part failed = go where
   go (Done s a) = done s a
   go (Partial f) = part $ go . f
   go (Failed s e) = failed s e
   go (Eff m) = m >>= go
 
-supplyDecoder :: Functor m => [s] -> Decoder e s m a -> Decoder e s m a
-supplyDecoder [] p = p
-supplyDecoder (x:xs) (Partial f) = supplyDecoder xs (f x)
-supplyDecoder xs (Done s a) = Done (s ++ xs) a
-supplyDecoder xs (Failed s e) = Failed (s ++ xs) e
-supplyDecoder xs (Eff m) = Eff $ supplyDecoder xs <$> m
+supplyDrive :: Functor m => [s] -> Drive e s m a -> Drive e s m a
+supplyDrive [] p = p
+supplyDrive (x:xs) (Partial f) = supplyDrive xs (f x)
+supplyDrive xs (Done s a) = Done (s ++ xs) a
+supplyDrive xs (Failed s e) = Failed (s ++ xs) e
+supplyDrive xs (Eff m) = Eff $ supplyDrive xs <$> m
 
-newtype PlayerT e s m a = PlayerT { unPlayerT :: forall r. s -> (s -> a -> Decoder e s m r) -> Decoder e s m r }
+newtype PlayerT e s m a = PlayerT { unPlayerT :: forall r. s -> (s -> a -> Drive e s m r) -> Drive e s m r }
 
 instance Functor (PlayerT e s m) where
   fmap = liftM
@@ -57,7 +57,7 @@ instance (Monoid e, Functor m) => Alternative (PlayerT e s m) where
     run e xs (Eff m) = Eff $ fmap (run e xs) m
     run _ xs (Done ss a) = Done (ss ++ xs) a
 
-runPlayerT :: PlayerT e s m a -> Decoder e s m a
+runPlayerT :: PlayerT e s m a -> Drive e s m a
 runPlayerT m = Partial $ \i -> unPlayerT m i (Done . pure)
 
 consuming :: (Semigroup s, Functor m)
