@@ -18,7 +18,7 @@ commitTape :: Functor w => (m (Tape w m a) -> m (Tape w m a)) -> Tape w m a -> T
 commitTape t (Effect m) = Effect (t m)
 commitTape t (Yield a w) = Yield a (commitTape t <$> w)
 
-(@->) :: (Comonad v, Functor w, Functor m) => Tape v m a -> Tape w (Decoder' a m) b -> Tape w m b
+(@->) :: (Comonad v, Functor w, Functor m) => Tape v m a -> Tape w (Decoder Void a m) b -> Tape w m b
 y@(Yield a vcont) @-> Effect d = case d of
   Partial f -> extract vcont @-> Effect (f a)
   Done s k -> y @-> commitTape (supplyDecoder s) k

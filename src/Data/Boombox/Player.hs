@@ -4,15 +4,12 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Applicative
 import Data.Semigroup
-import Data.Void
 
 data Decoder e s m a = Done [s] a
   | Partial (s -> Decoder e s m a)
   | Failed [s] !e
   | Eff (m (Decoder e s m a))
   deriving Functor
-
-type Decoder' = Decoder Void
 
 unDecoder :: Monad m => ([s] -> a -> m r) -> ((s -> m r) -> m r) -> ([s] -> e -> m r) -> Decoder e s m a -> m r
 unDecoder done part failed = go where
