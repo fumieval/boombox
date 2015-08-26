@@ -18,10 +18,6 @@ driveTape t (Eff m) = m >>= driveTape t
 driveTape (Effect m) d = m >>= (`driveTape` d)
 driveTape (Yield a wcont) (Partial f) = driveTape (extract wcont) (f a)
 
-commitTape :: Functor w => (m (Tape w m a) -> m (Tape w m a)) -> Tape w m a -> Tape w m a
-commitTape t (Effect m) = Effect (t m)
-commitTape t (Yield a w) = Yield a (commitTape t <$> w)
-
 (@->) :: (Comonad v, Functor w, Functor m) => Tape v m a -> Tape w (Drive Void a m) b -> Tape w m b
 y@(Yield a vcont) @-> Effect d = case d of
   Partial f -> extract vcont @-> Effect (f a)

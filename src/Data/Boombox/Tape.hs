@@ -5,6 +5,10 @@
 module Data.Boombox.Tape (Tape(..)
   , headTape
   , flattenTape
+  , hoistTransTape
+  , hoistTape
+  , transTape
+  , commitTape
   , Chronological(..)
   , EventOrder(..)
   , Genesis(..)
@@ -36,6 +40,24 @@ headTape (Effect m) = m >>= headTape
 flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
 flattenTape (Yield f w) = extract $ foldr (extend . Yield) (fmap flattenTape w) f
 flattenTape (Effect m) = Effect (fmap flattenTape m)
+
+hoistTransTape :: (Functor w, Functor n) => (forall x. v x -> w x) -> (forall x. m x -> n x) -> Tape v m a -> Tape w n a
+hoistTransTape s t = go where
+    go (Yield a w) = Yield a $ fmap go $ s w
+    go (Effect m) = Effect $ fmap go $ t m
+{-# INLINE hoistTransTape #-}
+
+hoistTape :: (Functor w, Functor m) => (forall x. v x -> w x) -> Tape v m a -> Tape w m a
+hoistTape t = hoistTransTape t id
+{-# INLINE hoistTape #-}
+
+transTape :: (Functor w, Functor n) => (forall x. m x -> n x) -> Tape w m a -> Tape w n a
+transTape = hoistTransTape id
+{-# INLINE transTape #-}
+
+commitTape :: Functor w => (m (Tape w m a) -> m (Tape w m a)) -> Tape w m a -> Tape w m a
+commitTape t (Effect m) = Effect (t m)
+commitTape t (Yield a w) = Yield a (commitTape t <$> w)
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where
