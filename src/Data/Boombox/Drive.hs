@@ -11,6 +11,18 @@ data Drive e s m a = Done [s] a
   | Eff (m (Drive e s m a))
   deriving Functor
 
+instance Functor m => Applicative (Drive e s m) where
+  pure = return
+  (<*>) = ap
+
+instance Functor m => Monad (Drive e s m) where
+  return a = Done [] a
+  m >>= k = go m where
+    go (Done s a) = supplyDrive s (k a)
+    go (Partial f) = Partial $ go . f
+    go (Failed s e) = Failed s e
+    go (Eff f) = Eff (fmap (>>=k) f)
+
 unDrive :: Monad m => ([s] -> a -> m r) -> ((s -> m r) -> m r) -> ([s] -> e -> m r) -> Drive e s m a -> m r
 unDrive done part failed = go where
   go (Done s a) = done s a

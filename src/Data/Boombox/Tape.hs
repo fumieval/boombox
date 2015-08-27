@@ -3,20 +3,27 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
 module Data.Boombox.Tape (Tape(..)
+  -- * Consuming tapes
   , headTape
+  , unconsTape
+  , fastforward
+  -- * Transforming tapes
   , flattenTape
   , yieldMany
   , hoistTransTape
   , hoistTape
   , transTape
   , commitTape
+  -- * Seekable tape
+  , Reel
+  , Needle(..)
+  , seekReel
+  -- * Time series
   , Chronological(..)
   , EventOrder(..)
   , Genesis(..)
   , Stepper(..)
-  , Needle(..)
-  , Reel
-  , seekReel) where
+  ) where
 
 import Control.Category
 import Control.Applicative
@@ -37,6 +44,14 @@ data Tape w m a = Yield a (w (Tape w m a))
 headTape :: Monad m => Tape w m a -> m a
 headTape (Yield a _) = return a
 headTape (Effect m) = m >>= headTape
+
+unconsTape :: Monad m => Tape w m a -> m (a, w (Tape w m a))
+unconsTape (Yield a w) = return (a, w)
+unconsTape (Effect m) = m >>= unconsTape
+
+fastforward :: (Comonad w, Monad m) => (a -> m x) -> Tape w m a -> m ()
+fastforward k (Yield a w) = k a >> fastforward k (extract w)
+fastforward k (Effect m) = m >>= fastforward k
 
 flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
 flattenTape (Yield f w) = yieldMany f (fmap flattenTape w)
