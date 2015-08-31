@@ -7,7 +7,7 @@ import Control.Monad.IO.Class
 import Control.Applicative
 
 data Drive e s m a = Done [s] a
-  | Partial (Drive e s m a) (s -> Drive e s m a)
+  | Partial (s -> Drive e s m a)
   | Failed [s] !e
   | Eff (m (Drive e s m a))
   deriving Functor
@@ -20,34 +20,28 @@ instance Functor m => Monad (Drive e s m) where
   return a = Done [] a
   m >>= k = go m where
     go (Done s a) = supplyDrive s (k a)
-    go (Partial e f) = Partial (go e) (go . f)
+    go (Partial f) = Partial (go . f)
     go (Failed s e) = Failed s e
     go (Eff f) = Eff (fmap (>>=k) f)
 
-unDrive :: Monad m => ([s] -> a -> m r) -> (m r -> (s -> m r) -> m r) -> ([s] -> e -> m r) -> Drive e s m a -> m r
+unDrive :: Monad m => ([s] -> a -> m r) -> ((s -> m r) -> m r) -> ([s] -> e -> m r) -> Drive e s m a -> m r
 unDrive done part fl = go where
   go (Done s a) = done s a
-  go (Partial e f) = part (go e) (go . f)
+  go (Partial f) = part (go . f)
   go (Failed s e) = fl s e
   go (Eff m) = m >>= go
 
 supplyDrive :: Functor m => [s] -> Drive e s m a -> Drive e s m a
 supplyDrive [] p = p
-supplyDrive (x:xs) (Partial _ f) = supplyDrive xs (f x)
+supplyDrive (x:xs) (Partial f) = supplyDrive xs (f x)
 supplyDrive xs (Done s a) = Done (s ++ xs) a
 supplyDrive xs (Failed s e) = Failed (s ++ xs) e
 supplyDrive xs (Eff m) = Eff $ supplyDrive xs <$> m
 
-finishDrive :: Monad m => Drive e s m a -> m (Either e a, [s])
-finishDrive (Done s a) = return (Right a, s)
-finishDrive (Partial s _) = finishDrive s
-finishDrive (Failed s e) = return (Left e, s)
-finishDrive (Eff m) = m >>= finishDrive
-
 catchDrive :: Functor m => (e -> Drive e' s m a) -> Drive e s m a -> Drive e' s m a
 catchDrive k (Failed xs e) = supplyDrive xs (k e)
 catchDrive _ (Done s a) = Done s a
-catchDrive k (Partial e f) = Partial (catchDrive k e) (catchDrive k . f)
+catchDrive k (Partial f) = Partial (catchDrive k . f)
 catchDrive k (Eff m) = Eff $ fmap (catchDrive k) m
 
 newtype PlayerT e s m a = PlayerT { unPlayerT :: forall r. [s]
@@ -87,19 +81,19 @@ failed :: e -> PlayerT e s m a
 failed e = PlayerT $ \s ce _ -> ce s e
 
 consume :: PlayerT e s m [s]
-consume = PlayerT $ \s ce cs -> Partial (cs [] s) $ \x -> unPlayerT consume s ce $ \l xs -> cs l (x : xs)
+consume = PlayerT $ \s ce cs -> Partial $ \x -> unPlayerT consume s ce $ \l xs -> cs l (x : xs)
 
 try :: Functor m => PlayerT e s m a -> PlayerT e s m a
 try pl = PlayerT $ \s ce cs -> go ce s (unPlayerT pl s Failed cs) where
-  go ce xs (Partial e f) = Partial (go ce xs e) (\x -> go ce (xs ++ [x]) (f x))
+  go ce xs (Partial f) = Partial (\x -> go ce (xs ++ [x]) (f x))
   go _ _ (Done s a) = Done s a
   go ce xs (Eff m) = Eff $ fmap (go ce xs) m
   go ce xs (Failed _ e) = ce xs e
 
-await :: Monoid e => PlayerT e s m s
+await :: PlayerT e s m s
 await = PlayerT $ \s ce cs -> case s of
   (x:xs) -> cs xs x
-  [] -> Partial (ce [] mempty) $ \s' -> cs [] s'
+  [] -> Partial $ \s' -> cs [] s'
 
 leftover :: [s] -> PlayerT e s m ()
 leftover ss = PlayerT $ \s _ cs -> cs (s ++ ss) ()
