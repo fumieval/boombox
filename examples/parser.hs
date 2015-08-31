@@ -1,43 +1,45 @@
 {-# LANGUAGE FlexibleInstances #-}
-import Data.Boombox.Drive
+import Data.Boombox.Drive as B
 import Text.Parser.Combinators
 import Text.Parser.Char
 import Text.Parser.Token
 import Data.Functor.Identity
 import Control.Applicative
+import Data.Monoid
 
 instance Functor m => Parsing (PlayerT ParseError s m) where
-  try = trackPlayerT
-  m <?> name = PlayerT $ \s ce cs -> unPlayerT m s (ce . Expecting name) cs
+  try = B.try
+  m <?> name = PlayerT $ \s ce cs -> unPlayerT m s (\s' -> ce s' . Expecting [name]) cs
   unexpected s = failed $ Unexpected s
-  notFollowedBy m = try $ PlayerT $ \s ce cs -> unPlayerT m s (\_ -> cs s ()) (const $ ce . Unexpected . show)
+  notFollowedBy m = B.try $ PlayerT $ \s ce cs -> unPlayerT m s (\s' _ -> cs s' ()) (\s' -> ce s' . Unexpected . show)
   eof = PlayerT $ \s ce cs -> if null s
-    then Partial (cs [] ()) (const $ ce (Unexpected "leftover"))
-    else ce (Unexpected "leftover") 
+    then Partial (cs [] ()) (\s' -> ce [s'] (Unexpected "leftover"))
+    else ce s (Unexpected "leftover")
 
 instance Functor m => CharParsing (PlayerT ParseError Char m) where
   satisfy p = do
-    x <- awaitError EndOfStream
-    if p x then return x else failed $ Unexpected (show x)
+    x <- await <|> failed EndOfStream
+    if p x then return x else leftover [x] >> failed (Unexpected (show x))
 
 instance Functor m => TokenParsing (PlayerT ParseError Char m)
 
 data ParseError = EndOfStream
     | Unexpected String
-    | Expecting String ParseError
+    | Expecting [String] ParseError
     | Unknwown
 
 instance Monoid ParseError where
   mempty = Unknwown
+  mappend (Expecting s p) (Expecting t q) = Expecting (s ++ t) p
   mappend _ a = a
 
 toEnglish :: ParseError -> String
 toEnglish EndOfStream = "Unexpected end of stream"
 toEnglish (Unexpected s) = "Unexpected " ++ s
-toEnglish (Expecting s EndOfStream) = "expecting " ++ s ++ ", but got end of stream"
-toEnglish (Expecting s (Unexpected e)) = "expecting " ++ s ++ ", but got " ++ e
-toEnglish (Expecting s (Expecting t e)) = "expecting " ++ s ++ " (i.e. " ++ t ++ "), but failed due to: " ++ toEnglish e
-toEnglish (Expecting s e) = "expecting " ++ s ++ ", but failed due to: " ++ toEnglish e
+toEnglish (Expecting s EndOfStream) = "expecting " ++ unwords s ++ ", but got end of stream"
+toEnglish (Expecting s (Unexpected e)) = "expecting " ++ unwords s ++ ", but got " ++ e
+toEnglish (Expecting s (Expecting t e)) = "expecting " ++ unwords s ++ ", but failed due to: " ++ toEnglish e
+toEnglish (Expecting s e) = "expecting " ++ unwords s ++ ", but failed due to: " ++ toEnglish e
 toEnglish Unknwown = "an unknwown error"
 
 testParser :: (Show a) => Parser a -> String -> IO ()
