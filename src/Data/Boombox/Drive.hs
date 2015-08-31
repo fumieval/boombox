@@ -44,6 +44,12 @@ finishDrive (Partial s _) = finishDrive s
 finishDrive (Failed s e) = return (Left e, s)
 finishDrive (Eff m) = m >>= finishDrive
 
+catchDrive :: Functor m => (e -> Drive e' s m a) -> Drive e s m a -> Drive e' s m a
+catchDrive k (Failed xs e) = supplyDrive xs (k e)
+catchDrive _ (Done s a) = Done s a
+catchDrive k (Partial e f) = Partial (catchDrive k e) (catchDrive k . f)
+catchDrive k (Eff m) = Eff $ fmap (catchDrive k) m
+
 newtype PlayerT e s m a = PlayerT { unPlayerT :: forall r. [s]
     -> ([s] -> e -> Drive e s m r)
     -> ([s] -> a -> Drive e s m r)
