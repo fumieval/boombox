@@ -1,4 +1,5 @@
 module Data.Boombox (driveTape
+  , (@-$)
   , (@->)
   , (-@>)
   , (>-$)
@@ -19,6 +20,18 @@ driveTape t (Eff m) = m >>= driveTape t
 driveTape (Effect m) d = m >>= (`driveTape` d)
 driveTape (Yield a wcont) (Partial f) = driveTape (extract wcont) (f a)
 
+-- | Combine a tape with a drive.
+(@-$):: (Comonad w, Monad m)
+  => Tape w m s
+  -> Drive Void s m a
+  -> m a
+_ @-$ Done _ a = return a
+_ @-$ Failed _ e = absurd e
+t @-$ Eff m = m >>= (t @-$)
+Effect m @-$ d = m >>= (@-$ d)
+Yield a wcont @-$ Partial f = extract wcont @-$ f a
+
+-- | Combine a tape with a recorder. The result will be synchronized with the recorder.
 (-@>) :: (Comonad v, Functor w, Functor m) => Tape v m a -> Tape w (Drive Void a m) b -> Tape w m b
 y@(Yield a vcont) -@> Effect d = case d of
   Partial f -> extract vcont -@> Effect (f a)
@@ -28,6 +41,7 @@ y@(Yield a vcont) -@> Effect d = case d of
 t -@> Yield b w = Yield b $ fmap (t-@>) w
 Effect m -@> t = Effect $ fmap (-@>t) m
 
+-- | Combine a tape with a recorder. Unlike ('-@>'), the result will be synchronized with the original tape.
 (@->) :: (Comonad w, Comonad v, Monad m) => Tape w m a -> Tape v (Drive Void a m) b -> Tape w m b
 Yield a w @-> rec = Effect $ fmap extract $ go rec where
   go (Yield b cont) = extend (Yield b) <$> go (extract cont)
@@ -38,6 +52,7 @@ Yield a w @-> rec = Effect $ fmap extract $ go rec where
     Failed _ v -> absurd v
 Effect m @-> rec = Effect $ fmap (@->rec) m
 
+-- | Combine a recorder with a drive.
 (>-$) :: (Comonad w, Functor m) => Tape w (Drive e a m) b -> Drive e b m r -> Drive e a m r
 _ >-$ Done _ r = Done [] r
 _ >-$ Failed _ e = Failed [] e
