@@ -3,6 +3,7 @@
 module Data.Boombox.Drive where
 import Control.Monad
 import Control.Monad.Trans.Class
+import Control.Monad.IO.Class
 import Control.Applicative
 
 data Drive e s m a = Done [s] a
@@ -62,6 +63,9 @@ instance Monad (PlayerT e s m) where
 instance MonadTrans (PlayerT e s) where
   lift m = PlayerT $ \s _ cs -> Eff $ liftM (cs s) m
 
+instance MonadIO m => MonadIO (PlayerT e s m) where
+  liftIO m = PlayerT $ \s _ cs -> Eff $ liftM (cs s) (liftIO m)
+
 instance (Monoid e) => Alternative (PlayerT e s m) where
   empty = failed mempty
   p <|> q = PlayerT $ \s ce cs -> unPlayerT p s (\s' e -> unPlayerT q s' (\s'' -> ce s'' . mappend e) cs) cs
@@ -77,7 +81,7 @@ failed :: e -> PlayerT e s m a
 failed e = PlayerT $ \s ce _ -> ce s e
 
 consume :: PlayerT e s m [s]
-consume = PlayerT $ \s ce cs -> Partial (cs [] s) (\x -> unPlayerT consume s ce $ \l xs -> cs l (x : xs))
+consume = PlayerT $ \s ce cs -> Partial (cs [] s) $ \x -> unPlayerT consume s ce $ \l xs -> cs l (x : xs)
 
 try :: Functor m => PlayerT e s m a -> PlayerT e s m a
 try pl = PlayerT $ \s ce cs -> go ce s (unPlayerT pl s Failed cs) where
