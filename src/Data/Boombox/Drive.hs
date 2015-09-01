@@ -91,7 +91,7 @@ try pl = PlayerT $ \s ce cs -> go ce s (unPlayerT pl s Failed cs) where
   go ce xs (Failed _ e) = ce xs e
 
 await :: PlayerT e s m s
-await = PlayerT $ \s ce cs -> case s of
+await = PlayerT $ \s _ cs -> case s of
   (x:xs) -> cs xs x
   [] -> Partial $ \s' -> cs [] s'
 

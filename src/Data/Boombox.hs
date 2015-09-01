@@ -1,5 +1,7 @@
-module Data.Boombox (driveTape
+module Data.Boombox (
+    driveTape
   , (@-$)
+  , recording
   , (@->)
   , (-@>)
   , (>-$)
@@ -30,6 +32,9 @@ _ @-$ Failed _ e = absurd e
 t @-$ Eff m = m >>= (t @-$)
 Effect m @-$ d = m >>= (@-$ d)
 Yield a wcont @-$ Partial f = extract wcont @-$ f a
+
+recording :: PlayerT e a m (Tape w (Drive e a m) b) -> Tape w (Drive e a m) b
+recording = Effect . runPlayerT
 
 -- | Combine a tape with a recorder. The result will be synchronized with the recorder.
 (-@>) :: (Comonad v, Functor w, Functor m) => Tape v m a -> Tape w (Drive Void a m) b -> Tape w m b
