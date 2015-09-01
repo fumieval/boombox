@@ -100,3 +100,10 @@ leftover ss = PlayerT $ \s _ cs -> cs (s ++ ss) ()
 
 catchPlayerT :: PlayerT e s m a -> (e -> PlayerT e s m a) -> PlayerT e s m a
 catchPlayerT m k = PlayerT $ \s ce cs -> unPlayerT m s (\s' e -> unPlayerT (k e) s' ce cs) cs
+
+lookAhead :: Functor m => PlayerT e s m a -> PlayerT e s m a
+lookAhead pl = PlayerT $ \s ce cs -> go ce cs s (unPlayerT pl s Failed Done) where
+  go ce cs xs (Partial f) = Partial (\x -> go ce cs (xs ++ [x]) (f x))
+  go _ cs xs (Done _ a) = cs xs a
+  go ce cs xs (Eff m) = Eff $ fmap (go ce cs xs) m
+  go ce _ xs (Failed _ e) = ce xs e
