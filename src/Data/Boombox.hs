@@ -5,11 +5,13 @@ module Data.Boombox (
   , (@->)
   , (-@>)
   , (>-$)
+  , (>->)
   , module Data.Boombox.Tape
   , module Data.Boombox.Drive) where
 import Data.Boombox.Tape
 import Data.Boombox.Drive
 import Control.Comonad
+import Control.Monad.Trans.Class
 import Data.Void
 
 driveTape :: (Comonad w, Monad m)
@@ -68,3 +70,13 @@ Effect u >-$ d = go u where
   go (Eff m) = Eff $ fmap go m
   go (Done s k) = commitTape (supplyDrive s) k >-$ d
 Yield b wcont >-$ Partial f = extract wcont >-$ f b
+
+-- | Combine two recorders.
+(>->) :: (Comonad v, Functor w, Functor (t m), Monad m, MonadTrans t) => Tape v (t m) a -> Tape w (Drive Void a m) b -> Tape w (t m) b
+y@(Yield a vcont) >-> Effect d = case d of
+  Partial f -> extract vcont >-> Effect (f a)
+  Done s k -> y >-> commitTape (supplyDrive s) k
+  Eff m -> Effect $ lift $ fmap ((y >->) . Effect) m
+  Failed _ v -> absurd v
+t >-> Yield b w = Yield b $ fmap (t>->) w
+Effect m >-> t = Effect $ fmap (>->t) m
