@@ -7,9 +7,11 @@ module Data.Boombox.Tape (Tape(..)
   , headTape
   , unconsTape
   , fastforward
+  -- * Constructing tapes
+  , yieldMany
   -- * Transforming tapes
   , flattenTape
-  , yieldMany
+  , filterTape
   , hoistTransTape
   , hoistTape
   , transTape
@@ -56,6 +58,12 @@ fastforward k (Effect m) = m >>= fastforward k
 flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
 flattenTape (Yield f w) = yieldMany f (fmap flattenTape w)
 flattenTape (Effect m) = Effect (fmap flattenTape m)
+
+filterTape :: (Comonad w, Functor m) => (a -> Bool) -> Tape w m a -> Tape w m a
+filterTape p (Yield a cont)
+  | p a = Yield a (fmap (filterTape p) cont)
+  | otherwise = filterTape p (extract cont)
+filterTape p (Effect m) = Effect $ fmap (filterTape p) m
 
 yieldMany :: (Comonad w, Foldable f) => f a -> w (Tape w m a) -> Tape w m a
 yieldMany f w = extract $ foldr (extend . Yield) w f
