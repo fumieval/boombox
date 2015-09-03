@@ -42,7 +42,7 @@ recording = Effect . runPlayerT
 (-@>) :: (Comonad v, Functor w, Functor m) => Tape v m a -> Tape w (Drive Void a m) b -> Tape w m b
 y@(Yield a vcont) -@> Effect d = case d of
   Partial f -> extract vcont -@> Effect (f a)
-  Done !s k -> y -@> commitTape (supplyDrive s) k
+  Done s k -> y -@> commitTape (supplyDrive s) k
   Eff m -> Effect $ fmap ((y -@>) . Effect) m
   Failed _ v -> absurd v
 t -@> Yield b w = Yield b $ fmap (t-@>) w
@@ -53,7 +53,7 @@ Effect m -@> t = Effect $ fmap (-@>t) m
 Yield a w @-> rec = Effect $ fmap extract $ go rec where
   go (Yield b cont) = extend (Yield b) <$> go (extract cont)
   go (Effect d) = case d of
-    Done !s k -> return $ fmap (@->commitTape (supplyDrive s) k) w
+    Done s k -> return $ fmap (@->commitTape (supplyDrive s) k) w
     Partial f -> return $ fmap (@->Effect (f a)) w
     Eff m -> m >>= go . Effect
     Failed _ v -> absurd v

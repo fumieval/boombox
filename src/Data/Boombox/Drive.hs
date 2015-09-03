@@ -6,9 +6,9 @@ import Control.Monad.Trans.Class
 import Control.Monad.IO.Class
 import Control.Applicative
 
-data Drive e s m a = Done [s] a
+data Drive e s m a = Done ![s] a
   | Partial (s -> Drive e s m a)
-  | Failed [s] !e
+  | Failed ![s] !e
   | Eff (m (Drive e s m a))
   deriving Functor
 
