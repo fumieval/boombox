@@ -84,11 +84,11 @@ consume :: PlayerT e s m [s]
 consume = PlayerT $ \s ce cs -> Partial $ \x -> unPlayerT consume s ce $ \l xs -> cs l (x : xs)
 
 try :: Functor m => PlayerT e s m a -> PlayerT e s m a
-try pl = PlayerT $ \s ce cs -> go ce s (unPlayerT pl s Failed cs) where
-  go ce xs (Partial f) = Partial (\x -> go ce (xs ++ [x]) (f x))
+try pl = PlayerT $ \s ce cs -> go ce (reverse s) (unPlayerT pl s Failed cs) where
+  go ce xs (Partial f) = Partial (\x -> go ce (x : xs) (f x))
   go _ _ (Done s a) = Done s a
   go ce xs (Eff m) = Eff $ fmap (go ce xs) m
-  go ce xs (Failed _ e) = ce xs e
+  go ce xs (Failed _ e) = ce (reverse xs) e
 
 await :: PlayerT e s m s
 await = PlayerT $ \s _ cs -> case s of
@@ -102,8 +102,8 @@ catchPlayerT :: PlayerT e s m a -> (e -> PlayerT e s m a) -> PlayerT e s m a
 catchPlayerT m k = PlayerT $ \s ce cs -> unPlayerT m s (\s' e -> unPlayerT (k e) s' ce cs) cs
 
 lookAhead :: Functor m => PlayerT e s m a -> PlayerT e s m a
-lookAhead pl = PlayerT $ \s ce cs -> go ce cs s (unPlayerT pl s Failed Done) where
-  go ce cs xs (Partial f) = Partial (\x -> go ce cs (xs ++ [x]) (f x))
-  go _ cs xs (Done _ a) = cs xs a
+lookAhead pl = PlayerT $ \s ce cs -> go ce cs (reverse s) (unPlayerT pl s Failed Done) where
+  go ce cs xs (Partial f) = Partial (\x -> go ce cs (x : xs) (f x))
+  go _ cs xs (Done _ a) = cs (reverse xs) a
   go ce cs xs (Eff m) = Eff $ fmap (go ce cs xs) m
-  go ce _ xs (Failed _ e) = ce xs e
+  go ce _ xs (Failed _ e) = ce (reverse xs) e
