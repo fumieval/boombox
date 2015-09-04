@@ -1,11 +1,13 @@
+{-# LANGUAGE RankNTypes #-}
 module Data.Boombox (
     driveTape
   , (@-$)
   , recording
-  , (@->)
+  -- * Simple composition
+  , composeWith
   , (-@>)
-  , (>-$)
   , (>->)
+  , (>-$)
   , module Data.Boombox.Tape
   , module Data.Boombox.Drive) where
 import Data.Boombox.Tape
@@ -13,70 +15,72 @@ import Data.Boombox.Drive
 import Control.Comonad
 import Control.Monad.Trans.Class
 import Data.Void
+import Control.Monad.Co
 
 driveTape :: (Comonad w, Monad m)
   => Tape w m s
-  -> Drive e s m a
+  -> Drive e s (CoT w m) a
   -> m (Tape w m s, [s], Either e a)
 driveTape t (Done s a) = return (t, s, Right a)
 driveTape t (Failed s e) = return (t, s, Left e)
-driveTape t (Eff m) = m >>= driveTape t
-driveTape (Effect m) d = m >>= (`driveTape` d)
+driveTape (Yield a wcont) (Eff m) = runCoT m $ extend (\cont -> driveTape (Yield a cont)) wcont
 driveTape (Yield a wcont) (Partial f) = driveTape (extract wcont) (f a)
+driveTape (Effect m) d = m >>= (`driveTape` d)
 
 -- | Combine a tape with a drive.
 (@-$):: (Comonad w, Monad m)
   => Tape w m s
-  -> Drive Void s m a
+  -> Drive Void s (CoT w m) a
   -> m a
-_ @-$ Done _ a = return a
-_ @-$ Failed _ e = absurd e
-t @-$ Eff m = m >>= (t @-$)
-Effect m @-$ d = m >>= (@-$ d)
-Yield a wcont @-$ Partial f = extract wcont @-$ f a
+t @-$ d = do
+  (_, _, Right a) <- driveTape t d
+  return a
 
 recording :: PlayerT e a m (Tape w (Drive e a m) b) -> Tape w (Drive e a m) b
 recording = Effect . runPlayerT
 
--- | Combine a tape with a recorder. The result will be synchronized with the recorder.
-(-@>) :: (Comonad v, Functor w, Functor m) => Tape v m a -> Tape w (Drive Void a m) b -> Tape w m b
-y@(Yield a vcont) -@> Effect d = case d of
-  Partial f -> extract vcont -@> Effect (f a)
-  Done s k -> y -@> commitTape (supplyDrive s) k
-  Eff m -> Effect $ fmap ((y -@>) . Effect) m
-  Failed _ v -> absurd v
-t -@> Yield b w = Yield b $ fmap (t-@>) w
-Effect m -@> t = Effect $ fmap (-@>t) m
+type Recorder e v w m a = Tape w (Drive e a (CoT v m))
 
--- | Combine a tape with a recorder. Unlike ('-@>'), the result will be synchronized with the original tape.
-(@->) :: (Comonad w, Comonad v, Monad m) => Tape w m a -> Tape v (Drive Void a m) b -> Tape w m b
-Yield a w @-> rec = Effect $ fmap extract $ go rec where
-  go (Yield b cont) = extend (Yield b) <$> go (extract cont)
-  go (Effect d) = case d of
-    Done s k -> return $ fmap (@->commitTape (supplyDrive s) k) w
-    Partial f -> return $ fmap (@->Effect (f a)) w
-    Eff m -> m >>= go . Effect
-    Failed _ v -> absurd v
-Effect m @-> rec = Effect $ fmap (@->rec) m
+composeWith :: (Comonad v, Functor w, Monad m, Functor n)
+  => (forall x. m x -> n x)
+  -> ([a] -> e -> Tape w n b)
+  -> Tape v n a
+  -> Recorder e v w m a b
+  -> Tape w n b
+composeWith t h = loop where
+  loop (Yield a vk0) (Effect d0) = go [] vk0 d0 where
+    go (x:xs) vk (Partial f) = go xs vk (f x)
+    go [] vk (Partial f) = extract vk `loop` Effect (f a)
+    go xs vk (Eff m) = Effect $ t $ runCoT m $ extend (\k -> return . go xs k) vk
+    go xs vk (Done s r) = finish (s ++ xs) vk r
+    go _ _ (Failed s e) = h s e
+
+    finish xs vk (Effect d1) = go xs vk d1
+    finish xs vk (Yield b w) = Yield b $ fmap (finish xs vk) w
+
+  loop tp (Yield b w) = Yield b $ fmap (loop tp) w
+  loop (Effect m) r = Effect $ fmap (`loop`r) m
+
+-- | Combine a tape with a recorder. The result will be synchronized with the recorder.
+(-@>) :: (Comonad v, Functor w, Monad m) => Tape v m a -> Recorder Void v w m a b -> Tape w m b
+(-@>) = composeWith id (const absurd)
+
+-- | Combine two recorders.
+-- @(>->) :: @
+(>->) :: (Comonad u, Comonad v, Functor w, Monad m)
+  => Recorder e u v m a b
+  -> Recorder e v w m b c
+  -> Recorder e u w m a c
+(>->) = composeWith (Eff . lift . fmap return) (const $ Effect . Failed [])
 
 -- | Combine a recorder with a drive.
-(>-$) :: (Comonad w, Functor m) => Tape w (Drive e a m) b -> Drive e b m r -> Drive e a m r
+(>-$) :: (Comonad w, Functor (t m), Monad m, MonadTrans t) => Tape w (Drive e a (t m)) b -> Drive e b (CoT w m) r -> Drive e a (t m) r
 _ >-$ Done _ r = Done [] r
 _ >-$ Failed _ e = Failed [] e
-t >-$ Eff m = Eff $ fmap (t>-$) m
+Yield b wcont >-$ Partial f = extract wcont >-$ f b
+Yield b wcont >-$ Eff m = Eff $ lift $ runCoT m $ extend (\w m' -> return $ Yield b w >-$ m') wcont
 Effect u >-$ d = go u where
   go (Failed s e) = Failed s e
   go (Partial f) = Partial (go . f)
   go (Eff m) = Eff $ fmap go m
   go (Done s k) = commitTape (supplyDrive s) k >-$ d
-Yield b wcont >-$ Partial f = extract wcont >-$ f b
-
--- | Combine two recorders.
-(>->) :: (Comonad v, Functor w, Functor (t m), Monad m, MonadTrans t) => Tape v (t m) a -> Tape w (Drive Void a m) b -> Tape w (t m) b
-y@(Yield a vcont) >-> Effect d = case d of
-  Partial f -> extract vcont >-> Effect (f a)
-  Done s k -> y >-> commitTape (supplyDrive s) k
-  Eff m -> Effect $ lift $ fmap ((y >->) . Effect) m
-  Failed _ v -> absurd v
-t >-> Yield b w = Yield b $ fmap (t>->) w
-Effect m >-> t = Effect $ fmap (>->t) m
