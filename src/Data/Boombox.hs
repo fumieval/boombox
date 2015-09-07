@@ -37,7 +37,7 @@ t @-$ d = do
   (_, _, Right a) <- driveTape t d
   return a
 
-recording :: PlayerT v e a m (Tape w (Drive v e a m) b) -> Tape w (Drive v e a m) b
+recording :: PlayerT v e a m (Recorder e v w m a b) -> Recorder e v w m a b
 recording = Effect . runPlayerT
 
 type Recorder e v w m a = Tape w (Drive v e a m)

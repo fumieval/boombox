@@ -78,6 +78,9 @@ failed e = PlayerT $ \s ce _ -> ce s e
 consume :: PlayerT w e s m [s]
 consume = PlayerT $ \s ce cs -> Partial $ \x -> unPlayerT consume s ce $ \l xs -> cs l (x : xs)
 
+control :: Functor w => CoT w m a -> PlayerT w e s m a
+control m = PlayerT $ \s _ cs -> Eff $ fmap (cs s) m
+
 try :: Functor w => PlayerT w e s m a -> PlayerT w e s m a
 try pl = PlayerT $ \s ce cs -> go ce (reverse s) (unPlayerT pl s Failed cs) where
   go ce xs (Partial f) = Partial (\x -> go ce (x : xs) (f x))
