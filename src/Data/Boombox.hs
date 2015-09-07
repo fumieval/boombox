@@ -4,6 +4,7 @@ module Data.Boombox (
   , (@-$)
   , recording
   -- * Simple composition
+  , Recorder
   , composeWith
   , (-@>)
   , (>->)
@@ -19,7 +20,7 @@ import Control.Monad.Co
 
 driveTape :: (Comonad w, Monad m)
   => Tape w m s
-  -> Drive e s (CoT w m) a
+  -> Drive w e s m a
   -> m (Tape w m s, [s], Either e a)
 driveTape t (Done s a) = return (t, s, Right a)
 driveTape t (Failed s e) = return (t, s, Left e)
@@ -30,16 +31,16 @@ driveTape (Effect m) d = m >>= (`driveTape` d)
 -- | Combine a tape with a drive.
 (@-$):: (Comonad w, Monad m)
   => Tape w m s
-  -> Drive Void s (CoT w m) a
+  -> Drive w Void s m a
   -> m a
 t @-$ d = do
   (_, _, Right a) <- driveTape t d
   return a
 
-recording :: PlayerT e a m (Tape w (Drive e a m) b) -> Tape w (Drive e a m) b
+recording :: PlayerT v e a m (Tape w (Drive v e a m) b) -> Tape w (Drive v e a m) b
 recording = Effect . runPlayerT
 
-type Recorder e v w m a = Tape w (Drive e a (CoT v m))
+type Recorder e v w m a = Tape w (Drive v e a m)
 
 composeWith :: (Comonad v, Functor w, Monad m, Functor n)
   => (forall x. m x -> n x)
@@ -65,8 +66,7 @@ composeWith t h = loop where
 (-@>) :: (Comonad v, Functor w, Monad m) => Tape v m a -> Recorder Void v w m a b -> Tape w m b
 (-@>) = composeWith id (const absurd)
 
--- | Combine two recorders.
--- @(>->) :: @
+-- | Connect two recorders.
 (>->) :: (Comonad u, Comonad v, Functor w, Monad m)
   => Recorder e u v m a b
   -> Recorder e v w m b c
@@ -74,11 +74,11 @@ composeWith t h = loop where
 (>->) = composeWith (Eff . lift . fmap return) (const $ Effect . Failed [])
 
 -- | Combine a recorder with a drive.
-(>-$) :: (Comonad w, Functor (t m), Monad m, MonadTrans t) => Tape w (Drive e a (t m)) b -> Drive e b (CoT w m) r -> Drive e a (t m) r
+(>-$) :: (Comonad v, Comonad w, Monad m) => Tape w (Drive v e a m) b -> Drive w e b m r -> Drive v e a m r
 _ >-$ Done _ r = Done [] r
 _ >-$ Failed _ e = Failed [] e
 Yield b wcont >-$ Partial f = extract wcont >-$ f b
-Yield b wcont >-$ Eff m = Eff $ lift $ runCoT m $ extend (\w m' -> return $ Yield b w >-$ m') wcont
+Yield b wcont >-$ Eff m = Eff $ lift $ runCoT m $ extend (\w -> return . (Yield b w >-$)) wcont
 Effect u >-$ d = go u where
   go (Failed s e) = Failed s e
   go (Partial f) = Partial (go . f)
