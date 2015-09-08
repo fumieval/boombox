@@ -94,7 +94,7 @@ await = PlayerT $ \s _ cs -> case s of
   [] -> Partial $ \s' -> cs [] s'
 
 leftover :: [s] -> PlayerT w e s m ()
-leftover ss = PlayerT $ \s _ cs -> cs (s ++ ss) ()
+leftover ss = PlayerT $ \s _ cs -> cs (ss ++ s) ()
 
 catchPlayerT :: PlayerT w e s m a -> (e -> PlayerT w e s m a) -> PlayerT w e s m a
 catchPlayerT m k = PlayerT $ \s ce cs -> unPlayerT m s (\s' e -> unPlayerT (k e) s' ce cs) cs

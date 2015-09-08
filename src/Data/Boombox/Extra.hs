@@ -2,6 +2,7 @@ module Data.Boombox.Extra where
 import Data.Boombox.Drive
 import Prelude hiding (takeWhile, dropWhile)
 
+-- | @peek ≡ lookAhead await@
 peek :: PlayerT w e a m a
 peek = do
   a <- await

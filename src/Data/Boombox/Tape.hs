@@ -18,10 +18,6 @@ module Data.Boombox.Tape (Tape(..)
   , commitTape
   , controlTape
   , pushBack
-  -- * Seekable tape
-  , Reel
-  , Needle(..)
-  , seekReel
   -- * Time series
   , Chronological(..)
   , EventOrder(..)
@@ -40,6 +36,7 @@ import Control.Comonad.Traced hiding ((<>))
 import Data.Reflection
 import Data.Proxy
 import Data.Semigroup
+import Control.Monad.Co
 
 data Tape w m a = Yield a (w (Tape w m a))
   | Effect (m (Tape w m a))
@@ -52,6 +49,10 @@ headTape (Effect m) = m >>= headTape
 unconsTape :: Monad m => Tape w m a -> m (a, w (Tape w m a))
 unconsTape (Yield a w) = return (a, w)
 unconsTape (Effect m) = m >>= unconsTape
+
+playTape :: (Comonad w, Monad m) => (a -> CoT w m x) -> Tape w m a -> m ()
+playTape k (Yield a w) = runCoT (k a) $ fmap (const . playTape k) w
+playTape k (Effect m) = m >>= playTape k
 
 fastforward :: (Comonad w, Monad m) => (a -> m x) -> Tape w m a -> m ()
 fastforward k (Yield a w) = k a >> fastforward k (extract w)
@@ -72,8 +73,8 @@ yieldMany f w = extract $ foldr (extend . Yield) w f
 
 hoistTransTape :: (Functor w, Functor n) => (forall x. v x -> w x) -> (forall x. m x -> n x) -> Tape v m a -> Tape w n a
 hoistTransTape s t = go where
-    go (Yield a w) = Yield a $ fmap go $ s w
-    go (Effect m) = Effect $ fmap go $ t m
+  go (Yield a w) = Yield a $ fmap go $ s w
+  go (Effect m) = Effect $ fmap go $ t m
 {-# INLINE hoistTransTape #-}
 
 hoistTape :: (Functor w, Functor m) => (forall x. v x -> w x) -> Tape v m a -> Tape w m a
@@ -92,7 +93,7 @@ controlTape :: Functor m => (w (Tape w m a) -> w (Tape w m a)) -> Tape w m a -> 
 controlTape t (Yield a w) = Yield a (t w)
 controlTape t (Effect m) = Effect $ fmap (controlTape t) m
 
-pushBack :: (Comonad w, Functor m) => [s] -> Tape w m s -> Tape w m s
+pushBack :: (Comonad w, Functor m) => [a] -> Tape w m a -> Tape w m a
 pushBack [] t = t
 pushBack (x:xs) (Yield a w) = Yield x $ extend (pushBack xs . Yield a) w
 pushBack xs (Effect m) = Effect (fmap (pushBack xs) m)
@@ -190,27 +191,3 @@ instance (Ord a, Reifies s (a -> a, a)) => Genesis ((,) (Stepper s a)) where
 instance (Genesis w, Functor m) => Applicative (Tape w m) where
   pure a = creation $ Yield a
   (<*>) = (<.>)
-
-data Needle i a = Needle !i (Maybe i -> a) deriving Functor
-
-instance Comonad (Needle i) where
-  extract (Needle _ f) = f Nothing
-  extend k (Needle i f) = Needle i $ \m -> k $ Needle (maybe i id m) f
-
-instance Ord i => Chronological (Needle i) where
-  coincidence (Needle i f) (Needle j g) = case compare i j of
-    EQ -> Simultaneous (Needle i (liftA2 (,) f g))
-    LT -> LeftFirst
-    GT -> RightFirst
-
-instance (Ord a, Reifies s (a -> a, a)) => Genesis (Needle (Stepper s a)) where
-  creation k = go a0 where
-    go a = k $ Needle (Stepper a) (maybe (go (f a)) (go . getStepper))
-    (f, a0) = reflect (Proxy :: Proxy s)
-
-type Reel i m = Tape (Needle i) m
-
--- | Seek to an arbitrary position.
-seekReel :: Functor m => (i -> Maybe i) -> Reel i m a -> Reel i m a
-seekReel t (Yield _ (Needle i f)) = f (t i)
-seekReel t (Effect f) = Effect (fmap (seekReel t) f)

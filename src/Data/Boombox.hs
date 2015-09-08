@@ -2,16 +2,15 @@
 module Data.Boombox (
   -- * Constructing boomboxes
    Recorder
-  , recording
   -- * Composition
   , (@-$), (@->)
   , (>-$), (>->)
-  , composeWith
   , module Data.Boombox.Tape
   , module Data.Boombox.Drive) where
 import Data.Boombox.Tape
 import Data.Boombox.Drive
 import Control.Comonad
+import Control.Monad
 import Control.Monad.Trans.Class
 import Data.Void
 import Control.Monad.Co
@@ -23,18 +22,20 @@ infixl 8 >->
 
 (@-$) :: (Comonad w, Monad m)
   => Tape w m s
-  -> Drive w e s m a
-  -> m (Tape w m s, Either e a)
-t @-$ Done s a = return (pushBack s t, Right a)
-t @-$ Failed s e = return (pushBack s t, Left e)
-Yield a wcont @-$ Eff m = runCoT m $ extend (\cont -> (Yield a cont @-$)) wcont
-Yield a wcont @-$ Partial f = extract wcont @-$ f a
-Effect m @-$ d = m >>= (@-$ d)
+  -> PlayerT w e s m a
+  -> m ([s], Tape w m s, Either e a)
+t0 @-$ p = go t0 (runPlayerT p) where
+  t `go` Done s a = return (s, t, Right a)
+  t `go` Failed s e = return (s, t, Left e)
+  Yield a wcont `go` Eff m = runCoT m $ extend (\cont -> (Yield a cont `go`)) wcont
+  Yield a wcont `go` Partial f = extract wcont `go` f a
+  Effect m `go` d = m >>= (`go` d)
+{-# INLINE (@-$) #-}
 
-recording :: PlayerT v e a m (Recorder e v w m a b) -> Recorder e v w m a b
-recording = Effect . runPlayerT
+type Recorder e v w m a = Tape w (PlayerT v e a m)
 
-type Recorder e v w m a = Tape w (Drive v e a m)
+supplyRecorder :: Functor w => [a] -> Recorder e v w m a b -> Recorder e v w m a b
+supplyRecorder s = commitTape (leftover s>>)
 
 composeWith :: (Comonad v, Functor w, Monad m, Functor n)
   => (forall x. m x -> n x)
@@ -42,39 +43,45 @@ composeWith :: (Comonad v, Functor w, Monad m, Functor n)
   -> Tape v n a
   -> Recorder e v w m a b
   -> Tape w n b
-composeWith t h = loop where
-  loop (Yield a vk0) (Effect d0) = go [] vk0 d0 where
-    go (x:xs) vk (Partial f) = go xs vk (f x)
-    go [] vk (Partial f) = extract vk `loop` Effect (f a)
-    go xs vk (Eff m) = Effect $ t $ runCoT m $ extend (\k -> return . go xs k) vk
-    go xs vk (Done s r) = finish (s ++ xs) vk r
-    go _ _ (Failed s e) = h s e
+composeWith t h = prepare where
+  prepare (Yield a vk) r = downstream vk (supplyRecorder [a] r)
+  prepare (Effect m) r = Effect $ fmap (`prepare`r) m
 
-    finish xs vk (Effect d1) = go xs vk d1
-    finish xs vk (Yield b w) = Yield b $ fmap (finish xs vk) w
+  downstream vk (Effect d) = go vk (runPlayerT d)
+  downstream vk (Yield b w) = Yield b $ fmap (downstream vk) w
 
-  loop tp (Yield b w) = Yield b $ fmap (loop tp) w
-  loop (Effect m) r = Effect $ fmap (`loop`r) m
+  go vk (Partial f) = extract vk `upstream` f
+  go vk (Eff m) = Effect $ t $ runCoT m $ extend (\k -> return . go k) vk
+  go vk (Done s r) = downstream vk (supplyRecorder s r)
+  go _ (Failed s e) = h s e
+
+  upstream (Effect m) d = Effect $ fmap (`upstream`d) m
+  upstream (Yield a vk) d = go vk (d a)
+{-# INLINE composeWith #-}
 
 -- | Combine a tape with a recorder. The result will be synchronized with the recorder.
 (@->) :: (Comonad v, Functor w, Monad m) => Tape v m a -> Recorder Void v w m a b -> Tape w m b
 (@->) = composeWith id (const absurd)
+{-# INLINE (@->) #-}
 
 -- | Connect two recorders.
 (>->) :: (Comonad u, Comonad v, Functor w, Monad m)
   => Recorder e u v m a b
   -> Recorder e v w m b c
   -> Recorder e u w m a c
-(>->) = composeWith (Eff . lift . fmap return) (const $ Effect . Failed [])
+(>->) = composeWith lift (const $ Effect . failed)
+{-# INLINE (>->) #-}
 
 -- | Combine a recorder with a drive.
-(>-$) :: (Comonad v, Comonad w, Monad m) => Tape w (Drive v e a m) b -> Drive w e b m r -> Drive v e a m r
-_ >-$ Done _ r = Done [] r
-_ >-$ Failed _ e = Failed [] e
-Yield b wcont >-$ Partial f = extract wcont >-$ f b
-Yield b wcont >-$ Eff m = Eff $ lift $ runCoT m $ extend (\w -> return . (Yield b w >-$)) wcont
-Effect u >-$ d = go u where
-  go (Failed s e) = Failed s e
-  go (Partial f) = Partial (go . f)
-  go (Eff m) = Eff $ fmap go m
-  go (Done s k) = commitTape (supplyDrive s) k >-$ d
+(>-$) :: (Comonad v, Comonad w, Monad m) => Recorder e v w m a b -> PlayerT w e b m r -> PlayerT v e a m r
+t >-$ p = t `loop` runPlayerT p where
+  _ `loop` Done _ r = return r
+  _ `loop` Failed _ e = failed e
+  Yield b wcont `loop` Partial f = extract wcont `loop` f b
+  Yield b wcont `loop` Eff m = join $ lift $ runCoT m $ extend (\w -> return . loop (Yield b w)) wcont
+  Effect u `loop` d = go (runPlayerT u) where
+    go (Failed s e) = leftover s >> failed e
+    go (Partial f) = await >>= go . f
+    go (Eff m) = join $ control $ fmap go m
+    go (Done s k) = supplyRecorder s k `loop` d
+{-# INLINE (>-$) #-}
