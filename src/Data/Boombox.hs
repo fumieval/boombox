@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 module Data.Boombox (
     driveTape
-  , (@-$)
   , recording
   -- * Simple composition
   , Recorder
@@ -21,21 +20,12 @@ import Control.Monad.Co
 driveTape :: (Comonad w, Monad m)
   => Tape w m s
   -> Drive w e s m a
-  -> m (Tape w m s, [s], Either e a)
-driveTape t (Done s a) = return (t, s, Right a)
-driveTape t (Failed s e) = return (t, s, Left e)
+  -> m (Tape w m s, Either e a)
+driveTape t (Done s a) = return (pushBack s t, Right a)
+driveTape t (Failed s e) = return (pushBack s t, Left e)
 driveTape (Yield a wcont) (Eff m) = runCoT m $ extend (\cont -> driveTape (Yield a cont)) wcont
 driveTape (Yield a wcont) (Partial f) = driveTape (extract wcont) (f a)
 driveTape (Effect m) d = m >>= (`driveTape` d)
-
--- | Combine a tape with a drive.
-(@-$):: (Comonad w, Monad m)
-  => Tape w m s
-  -> Drive w Void s m a
-  -> m a
-t @-$ d = do
-  (_, _, Right a) <- driveTape t d
-  return a
 
 recording :: PlayerT v e a m (Recorder e v w m a b) -> Recorder e v w m a b
 recording = Effect . runPlayerT

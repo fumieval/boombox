@@ -17,6 +17,7 @@ module Data.Boombox.Tape (Tape(..)
   , transTape
   , commitTape
   , controlTape
+  , pushBack
   -- * Seekable tape
   , Reel
   , Needle(..)
@@ -90,6 +91,11 @@ commitTape t (Yield a w) = Yield a (commitTape t <$> w)
 controlTape :: Functor m => (w (Tape w m a) -> w (Tape w m a)) -> Tape w m a -> Tape w m a
 controlTape t (Yield a w) = Yield a (t w)
 controlTape t (Effect m) = Effect $ fmap (controlTape t) m
+
+pushBack :: (Comonad w, Functor m) => [s] -> Tape w m s -> Tape w m s
+pushBack [] t = t
+pushBack (x:xs) (Yield a w) = Yield x $ extend (pushBack xs . Yield a) w
+pushBack xs (Effect m) = Effect (fmap (pushBack xs) m)
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where
