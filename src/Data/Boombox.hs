@@ -1,13 +1,12 @@
 {-# LANGUAGE RankNTypes #-}
 module Data.Boombox (
-    driveTape
+  -- * Constructing boomboxes
+   Recorder
   , recording
-  -- * Simple composition
-  , Recorder
+  -- * Composition
+  , (@-$), (@->)
+  , (>-$), (>->)
   , composeWith
-  , (-@>)
-  , (>->)
-  , (>-$)
   , module Data.Boombox.Tape
   , module Data.Boombox.Drive) where
 import Data.Boombox.Tape
@@ -17,15 +16,20 @@ import Control.Monad.Trans.Class
 import Data.Void
 import Control.Monad.Co
 
-driveTape :: (Comonad w, Monad m)
+infix 6 @-$
+infixl 7 @->
+infixr 7 >-$
+infixl 8 >->
+
+(@-$) :: (Comonad w, Monad m)
   => Tape w m s
   -> Drive w e s m a
   -> m (Tape w m s, Either e a)
-driveTape t (Done s a) = return (pushBack s t, Right a)
-driveTape t (Failed s e) = return (pushBack s t, Left e)
-driveTape (Yield a wcont) (Eff m) = runCoT m $ extend (\cont -> driveTape (Yield a cont)) wcont
-driveTape (Yield a wcont) (Partial f) = driveTape (extract wcont) (f a)
-driveTape (Effect m) d = m >>= (`driveTape` d)
+t @-$ Done s a = return (pushBack s t, Right a)
+t @-$ Failed s e = return (pushBack s t, Left e)
+Yield a wcont @-$ Eff m = runCoT m $ extend (\cont -> (Yield a cont @-$)) wcont
+Yield a wcont @-$ Partial f = extract wcont @-$ f a
+Effect m @-$ d = m >>= (@-$ d)
 
 recording :: PlayerT v e a m (Recorder e v w m a b) -> Recorder e v w m a b
 recording = Effect . runPlayerT
@@ -53,8 +57,8 @@ composeWith t h = loop where
   loop (Effect m) r = Effect $ fmap (`loop`r) m
 
 -- | Combine a tape with a recorder. The result will be synchronized with the recorder.
-(-@>) :: (Comonad v, Functor w, Monad m) => Tape v m a -> Recorder Void v w m a b -> Tape w m b
-(-@>) = composeWith id (const absurd)
+(@->) :: (Comonad v, Functor w, Monad m) => Tape v m a -> Recorder Void v w m a b -> Tape w m b
+(@->) = composeWith id (const absurd)
 
 -- | Connect two recorders.
 (>->) :: (Comonad u, Comonad v, Functor w, Monad m)
