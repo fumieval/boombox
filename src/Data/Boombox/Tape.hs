@@ -7,6 +7,7 @@ module Data.Boombox.Tape (Tape(..)
   , headTape
   , unconsTape
   , fastforward
+  , playTape
   -- * Constructing tapes
   , yieldMany
   -- * Transforming tapes

@@ -20,7 +20,6 @@ library
   exposed-modules:     Data.Boombox
     , Data.Boombox.Tape
     , Data.Boombox.Drive
-    , Data.Boombox.IO
     , Data.Boombox.Extra
   -- other-modules:
   other-extensions:    BangPatterns, DeriveFunctor
