@@ -18,11 +18,11 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.Boombox
-  	, Data.Boombox.Tape
-  	, Data.Boombox.Drive
-  	, Data.Boombox.Head
-  	, Data.Boombox.IO
-  	, Data.Boombox.Extra
+    , Data.Boombox.Tape
+    , Data.Boombox.Drive
+    , Data.Boombox.Head
+    , Data.Boombox.IO
+    , Data.Boombox.Extra
   -- other-modules:
   other-extensions:    BangPatterns, DeriveFunctor
   build-depends:       base == 4.*, comonad, semigroups, semigroupoids, reflection, bytestring, transformers, kan-extensions
