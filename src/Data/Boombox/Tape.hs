@@ -8,6 +8,7 @@ module Data.Boombox.Tape (Tape(..)
   , unconsTape
   , fastforward
   , playTape
+  , cueTape
   -- * Constructing tapes
   , yieldMany
   -- * Transforming tapes
@@ -55,6 +56,10 @@ playTape :: (Comonad w, Monad m) => (a -> CoT w m x) -> Tape w m a -> m ()
 playTape k (Yield a w) = runCoT (k a) $ fmap (const . playTape k) w
 playTape k (Effect m) = m >>= playTape k
 
+cueTape :: (Comonad w, Monad m) => Tape w m a -> m (w (Tape w m a))
+cueTape (Yield a w) = return $ extend (Yield a) w
+cueTape (Effect m) = m >>= cueTape
+
 fastforward :: (Comonad w, Monad m) => (a -> m x) -> Tape w m a -> m ()
 fastforward k (Yield a w) = k a >> fastforward k (extract w)
 fastforward k (Effect m) = m >>= fastforward k
@@ -94,10 +99,8 @@ controlTape :: Functor m => (w (Tape w m a) -> w (Tape w m a)) -> Tape w m a -> 
 controlTape t (Yield a w) = Yield a (t w)
 controlTape t (Effect m) = Effect $ fmap (controlTape t) m
 
-pushBack :: (Comonad w, Functor m) => [a] -> Tape w m a -> Tape w m a
-pushBack [] t = t
-pushBack (x:xs) (Yield a w) = Yield x $ extend (pushBack xs . Yield a) w
-pushBack xs (Effect m) = Effect (fmap (pushBack xs) m)
+pushBack :: (Foldable f, Comonad w, Monad m) => f a -> Tape w m a -> Tape w m a
+pushBack f t = Effect $ yieldMany f <$> cueTape t
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where

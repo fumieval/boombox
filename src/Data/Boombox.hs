@@ -2,6 +2,7 @@
 module Data.Boombox (
   -- * Constructing boomboxes
    Recorder
+  , supplyRecorder
   -- * Composition
   , (@-$), (@->)
   , (>-$), (>->)
