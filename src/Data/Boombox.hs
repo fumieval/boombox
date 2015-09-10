@@ -7,9 +7,9 @@ module Data.Boombox (
   , (@-$), (@->)
   , (>-$), (>->)
   , module Data.Boombox.Tape
-  , module Data.Boombox.Drive) where
+  , module Data.Boombox.Player) where
 import Data.Boombox.Tape
-import Data.Boombox.Drive
+import Data.Boombox.Player
 import Control.Comonad
 import Control.Monad
 import Control.Monad.Trans.Class

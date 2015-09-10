@@ -20,6 +20,7 @@ module Data.Boombox.Tape (Tape(..)
   , commitTape
   , controlTape
   , pushBack
+  , intercept
   -- * Time series
   , Chronological(..)
   , EventOrder(..)
@@ -76,6 +77,10 @@ filterTape p (Effect m) = Effect $ fmap (filterTape p) m
 
 yieldMany :: (Comonad w, Foldable f) => f a -> w (Tape w m a) -> Tape w m a
 yieldMany f w = extract $ foldr (extend . Yield) w f
+
+intercept :: (Functor w, Applicative m) => (a -> m b) -> Tape w m a -> Tape w m b
+intercept k (Effect m) = Effect $ intercept k <$> m
+intercept k (Yield a w) = Effect $ flip Yield (fmap (intercept k) w) <$> k a
 
 hoistTransTape :: (Functor w, Functor n) => (forall x. v x -> w x) -> (forall x. m x -> n x) -> Tape v m a -> Tape w n a
 hoistTransTape s t = go where

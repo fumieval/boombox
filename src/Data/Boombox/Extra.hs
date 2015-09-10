@@ -1,5 +1,5 @@
 module Data.Boombox.Extra where
-import Data.Boombox.Drive
+import Data.Boombox.Player
 import Prelude hiding (takeWhile, dropWhile)
 
 -- | @peek ≡ lookAhead await@

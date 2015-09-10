@@ -1,6 +1,6 @@
 {-# LANGUAGE Rank2Types, LambdaCase, BangPatterns, DeriveFunctor #-}
 {-# LANGUAGE MultiParamTypeClasses, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
-module Data.Boombox.Drive where
+module Data.Boombox.Player where
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.IO.Class
@@ -75,12 +75,15 @@ runPlayerT m = unPlayerT m [] Failed Done
 failed :: e -> PlayerT w e s m a
 failed e = PlayerT $ \s ce _ -> ce s e
 
+-- | Consume all the input.
 consume :: PlayerT w e s m [s]
 consume = PlayerT $ \s ce cs -> Partial $ \x -> unPlayerT consume s ce $ \l xs -> cs l (x : xs)
 
+-- | Send a control signal expressed by 'CoT'.
 control :: Functor w => CoT w m a -> PlayerT w e s m a
 control m = PlayerT $ \s _ cs -> Eff $ fmap (cs s) m
 
+-- | Try to run the given action. If the action failed, the input stream will be unconsumed.
 try :: Functor w => PlayerT w e s m a -> PlayerT w e s m a
 try pl = PlayerT $ \s ce cs -> go ce (reverse s) (unPlayerT pl s Failed cs) where
   go ce xs (Partial f) = Partial (\x -> go ce (x : xs) (f x))
@@ -88,17 +91,20 @@ try pl = PlayerT $ \s ce cs -> go ce (reverse s) (unPlayerT pl s Failed cs) wher
   go ce xs (Eff m) = Eff $ fmap (go ce xs) m
   go ce xs (Failed _ e) = ce (reverse xs) e
 
+-- | Wait for an input.
 await :: PlayerT w e s m s
 await = PlayerT $ \s _ cs -> case s of
   (x:xs) -> cs xs x
   [] -> Partial $ \s' -> cs [] s'
 
+-- | Put a leftover input.
 leftover :: [s] -> PlayerT w e s m ()
 leftover ss = PlayerT $ \s _ cs -> cs (ss ++ s) ()
 
 catchPlayerT :: PlayerT w e s m a -> (e -> PlayerT w e s m a) -> PlayerT w e s m a
 catchPlayerT m k = PlayerT $ \s ce cs -> unPlayerT m s (\s' e -> unPlayerT (k e) s' ce cs) cs
 
+-- | Run a 'PlayerT' action without consuming any input.
 lookAhead :: Functor w => PlayerT w e s m a -> PlayerT w e s m a
 lookAhead pl = PlayerT $ \s ce cs -> go ce cs (reverse s) (unPlayerT pl s Failed Done) where
   go ce cs xs (Partial f) = Partial (\x -> go ce cs (x : xs) (f x))

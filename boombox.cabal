@@ -19,7 +19,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Data.Boombox
     , Data.Boombox.Tape
-    , Data.Boombox.Drive
+    , Data.Boombox.Player
     , Data.Boombox.Extra
   -- other-modules:
   other-extensions:    BangPatterns, DeriveFunctor
