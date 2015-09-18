@@ -45,32 +45,43 @@ newtype PlayerT w e s m a = PlayerT { unPlayerT :: forall r. [s]
     -> Drive w e s m r }
 
 instance Functor (PlayerT w e s m) where
-  fmap = liftM
+  fmap f m = PlayerT $ \s ce cs -> unPlayerT m s ce (\s' -> cs s' . f)
 
 instance Applicative (PlayerT w e s m) where
   pure = return
+  {-# INLINE pure #-}
   (<*>) = ap
+  {-# INLINE (<*>) #-}
 
 instance Monad (PlayerT w e s m) where
   return a = PlayerT $ \s _ cs -> cs s a
+  {-# INLINE return #-}
   m >>= k = PlayerT $ \s ce cs -> unPlayerT m s ce $ \s' a -> unPlayerT (k a) s' ce cs
+  {-# INLINE (>>=) #-}
 
 instance Comonad w => MonadTrans (PlayerT w e s) where
   lift m = PlayerT $ \s _ cs -> Eff $ fmap (cs s) (lift m)
+  {-# INLINE lift #-}
 
 instance (Comonad w, MonadIO m) => MonadIO (PlayerT w e s m) where
   liftIO m = PlayerT $ \s _ cs -> Eff $ fmap (cs s) (liftIO m)
+  {-# INLINE liftIO #-}
 
 instance (Monoid e) => Alternative (PlayerT w e s m) where
   empty = failed mempty
+  {-# INLINE empty #-}
   p <|> q = PlayerT $ \s ce cs -> unPlayerT p s (\s' e -> unPlayerT q s' (\s'' -> ce s'' . mappend e) cs) cs
+  {-# INLINE (<|>) #-}
 
 instance Monoid a => Monoid (PlayerT w e s m a) where
   mempty = pure mempty
+  {-# INLINE mempty #-}
   mappend = liftA2 mappend
+  {-# INLINE mappend #-}
 
 runPlayerT :: PlayerT w e s m a -> Drive w e s m a
 runPlayerT m = unPlayerT m [] Failed Done
+{-# INLINE runPlayerT #-}
 
 failed :: e -> PlayerT w e s m a
 failed e = PlayerT $ \s ce _ -> ce s e
@@ -95,11 +106,11 @@ try pl = PlayerT $ \s ce cs -> go ce (reverse s) (unPlayerT pl s Failed cs) wher
 await :: PlayerT w e s m s
 await = PlayerT $ \s _ cs -> case s of
   (x:xs) -> cs xs x
-  [] -> Partial $ \s' -> cs [] s'
+  [] -> Partial $ cs []
 
 -- | Put a leftover input.
 leftover :: [s] -> PlayerT w e s m ()
-leftover ss = PlayerT $ \s _ cs -> cs (ss ++ s) ()
+leftover ss = PlayerT $ \s _ cs -> let !s' = ss ++ s in cs s' ()
 
 catchPlayerT :: PlayerT w e s m a -> (e -> PlayerT w e s m a) -> PlayerT w e s m a
 catchPlayerT m k = PlayerT $ \s ce cs -> unPlayerT m s (\s' e -> unPlayerT (k e) s' ce cs) cs

@@ -4,10 +4,9 @@ import Prelude hiding (takeWhile, dropWhile)
 
 -- | @peek ≡ lookAhead await@
 peek :: PlayerT w e a m a
-peek = do
-  a <- await
-  leftover [a]
-  return a
+peek = PlayerT $ \s _ cs -> case s of
+  xxs@(x:xs) -> cs xxs x
+  [] -> Partial $ \s' -> cs [s'] s'
 
 takeWhile :: (a -> Bool) -> PlayerT w e a m [a]
 takeWhile p = do

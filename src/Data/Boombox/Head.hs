@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 module Data.Boombox.Head where
-import Data.Boombox.Drive
+import Data.Boombox.Player
 import Data.Boombox.Tape
 import Control.Comonad
 import Control.Monad.Co

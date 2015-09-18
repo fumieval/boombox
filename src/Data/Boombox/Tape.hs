@@ -14,6 +14,7 @@ module Data.Boombox.Tape (Tape(..)
   -- * Transforming tapes
   , flattenTape
   , filterTape
+  , foldTape
   , hoistTransTape
   , hoistTape
   , transTape
@@ -65,9 +66,15 @@ fastforward :: (Comonad w, Monad m) => (a -> m x) -> Tape w m a -> m ()
 fastforward k (Yield a w) = k a >> fastforward k (extract w)
 fastforward k (Effect m) = m >>= fastforward k
 
-flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
-flattenTape (Yield f w) = yieldMany f (fmap flattenTape w)
-flattenTape (Effect m) = Effect (fmap flattenTape m)
+flattenTape :: (Comonad w, Foldable f, Functor m) => Tape w m (f a) -> Tape w m a
+flattenTape = foldTape id
+{-# INLINE flattenTape #-}
+
+foldTape :: (Comonad w, Foldable f, Functor m) => (a -> f b) -> Tape w m a -> Tape w m b
+foldTape f = go where
+  go (Yield a w) = yieldMany (f a) (fmap go w)
+  go (Effect m) = Effect (fmap go m)
+{-# INLINE foldTape #-}
 
 filterTape :: (Comonad w, Functor m) => (a -> Bool) -> Tape w m a -> Tape w m a
 filterTape p (Yield a cont)
@@ -77,6 +84,7 @@ filterTape p (Effect m) = Effect $ fmap (filterTape p) m
 
 yieldMany :: (Comonad w, Foldable f) => f a -> w (Tape w m a) -> Tape w m a
 yieldMany f w = extract $ foldr (extend . Yield) w f
+{-# INLINE yieldMany #-}
 
 intercept :: (Functor w, Applicative m) => (a -> m b) -> Tape w m a -> Tape w m b
 intercept k (Effect m) = Effect $ intercept k <$> m

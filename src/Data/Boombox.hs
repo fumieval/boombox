@@ -45,15 +45,15 @@ composeWith :: (Comonad v, Functor w, Monad m, Functor n)
   -> Recorder e v w m a b
   -> Tape w n b
 composeWith t h = prepare where
-  prepare (Yield a vk) r = downstream vk (supplyRecorder [a] r)
+  prepare (Yield a vk) r = downstream [a] vk r
   prepare (Effect m) r = Effect $ fmap (`prepare`r) m
 
-  downstream vk (Effect d) = go vk (runPlayerT d)
-  downstream vk (Yield b w) = Yield b $ fmap (downstream vk) w
+  downstream s vk (Effect d) = go vk $ runPlayerT $ leftover s >> d
+  downstream s vk (Yield b w) = Yield b $ fmap (downstream s vk) w
 
   go vk (Partial f) = extract vk `upstream` f
   go vk (Eff m) = Effect $ t $ runCoT m $ extend (\k -> return . go k) vk
-  go vk (Done s r) = downstream vk (supplyRecorder s r)
+  go vk (Done s r) = downstream s vk r
   go _ (Failed s e) = h s e
 
   upstream (Effect m) d = Effect $ fmap (`upstream`d) m
