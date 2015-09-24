@@ -7,7 +7,6 @@ module Data.Boombox.Tape (Tape(..)
   , headTape
   , unconsTape
   , fastforward
-  , playTape
   , cueTape
   -- * Constructing tapes
   , yieldMany
@@ -26,7 +25,6 @@ module Data.Boombox.Tape (Tape(..)
   , Chronological(..)
   , EventOrder(..)
   , Genesis(..)
-  , Stepper(..)
   ) where
 
 import Control.Category
@@ -37,10 +35,7 @@ import Prelude hiding (id, (.))
 import Control.Comonad.Env
 import Control.Comonad.Store
 import Control.Comonad.Traced hiding ((<>))
-import Data.Reflection
-import Data.Proxy
 import Data.Semigroup
-import Control.Monad.Co
 
 data Tape w m a = Yield a (w (Tape w m a))
   | Effect (m (Tape w m a))
@@ -53,10 +48,6 @@ headTape (Effect m) = m >>= headTape
 unconsTape :: Monad m => Tape w m a -> m (a, w (Tape w m a))
 unconsTape (Yield a w) = return (a, w)
 unconsTape (Effect m) = m >>= unconsTape
-
-playTape :: (Comonad w, Monad m) => (a -> CoT w m x) -> Tape w m a -> m ()
-playTape k (Yield a w) = runCoT (k a) $ fmap (const . playTape k) w
-playTape k (Effect m) = m >>= playTape k
 
 cueTape :: (Comonad w, Monad m) => Tape w m a -> m (w (Tape w m a))
 cueTape (Yield a w) = return $ extend (Yield a) w
@@ -197,13 +188,6 @@ instance Genesis ((->) i) where
 
 instance Genesis w => Genesis (TracedT m w) where
   creation f = creation $ \w -> f $ TracedT (fmap const w)
-
-newtype Stepper s a = Stepper { getStepper :: a } deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
-
-instance (Ord a, Reifies s (a -> a, a)) => Genesis ((,) (Stepper s a)) where
-  creation k = go a0 where
-    go a = k (Stepper a, go (f a))
-    (f, a0) = reflect (Proxy :: Proxy s)
 
 instance (Genesis w, Functor m) => Applicative (Tape w m) where
   pure a = creation $ Yield a
