@@ -9,7 +9,7 @@ import System.Environment
 import Control.Comonad
 import Prelude hiding (lines)
 
-lines :: Comonad w => Recorder e w Identity IO (Maybe BS.ByteString) (Maybe BS.ByteString)
+lines :: Comonad w => Boombox w Identity IO (Maybe BS.ByteString) (Maybe BS.ByteString)
 lines = Effect (go []) where
   go ls = await >>= \case
     Just c -> do

@@ -6,6 +6,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Comonad
+import Data.Functor.Identity
 
 data Drive w s m a = Done a
   | Partial (s -> Drive w s m a)
@@ -59,31 +60,12 @@ await = PlayerT Partial
 leftover :: s -> PlayerT w s m ()
 leftover s = PlayerT $ \cs -> Leftover s (cs ())
 
-{-
--- | Try to run the given action. If the action failed, the input stream will be unconsumed.
-try :: Functor w => PlayerT w e s m a -> PlayerT w e s m a
-try pl = PlayerT $ \s ce cs -> go ce (reverse s) (unPlayerT pl s Failed cs) where
-  go ce xs (Partial f) = Partial (\x -> go ce (x : xs) (f x))
-  go _ _ (Done s a) = Done s a
-  go ce xs (Eff m) = Eff $ fmap (go ce xs) m
-  go ce xs (Failed _ e) = ce (reverse xs) e
-
--- | Wait for an input.
-await :: PlayerT w e s m s
-await = PlayerT $ \s _ cs -> case s of
-  (x:xs) -> cs xs x
-  [] -> Partial $ cs []
-
--- | Put a leftover input.
-
-catchPlayerT :: PlayerT w e s m a -> (e -> PlayerT w e s m a) -> PlayerT w e s m a
-catchPlayerT m k = PlayerT $ \s ce cs -> unPlayerT m s (\s' e -> unPlayerT (k e) s' ce cs) cs
-
 -- | Run a 'PlayerT' action without consuming any input.
-lookAhead :: Functor w => PlayerT w e s m a -> PlayerT w e s m a
-lookAhead pl = PlayerT $ \s ce cs -> go ce cs (reverse s) (unPlayerT pl s Failed Done) where
-  go ce cs xs (Partial f) = Partial (\x -> go ce cs (x : xs) (f x))
-  go _ cs xs (Done _ a) = cs (reverse xs) a
-  go ce cs xs (Eff m) = Eff $ fmap (go ce cs xs) m
-  go ce _ xs (Failed _ e) = ce (reverse xs) e
--}
+lookAhead :: (Functor w, Functor m) => PlayerT w s m a -> PlayerT w s m a
+lookAhead pl = PlayerT $ \cs -> go cs [] [] (unPlayerT pl Done) where
+  go cs l (x:xs) (Partial f) = go cs l xs (f x)
+  go cs l [] (Partial f) = Partial $ \x -> go cs (x : l) [] (f x)
+  go cs l xs (Leftover x k) = go cs l (x:xs) k
+  go cs l _ (Done a) = foldr Leftover (cs a) l
+  go cs l xs (Eff m) = Eff $ fmap (go cs l xs) m
+  go cs l xs (Cont m) = Cont $ m . fmap (. go cs l xs)
