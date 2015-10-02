@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.Boombox
+    , Data.Boombox.Async
     , Data.Boombox.Tape
     , Data.Boombox.Player
     , Data.Boombox.Extra

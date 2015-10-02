@@ -27,17 +27,13 @@ instance Applicative (PlayerT w s m) where
 
 instance Monad (PlayerT w s m) where
   return a = PlayerT $ \cs -> cs a
-  {-# INLINE return #-}
   m >>= k = PlayerT $ \cs -> unPlayerT m $ \a -> unPlayerT (k a) cs
-  {-# INLINE (>>=) #-}
 
 instance MonadTrans (PlayerT w s) where
   lift m = PlayerT $ \cs -> Eff $ fmap cs m
-  {-# INLINE lift #-}
 
 instance (MonadIO m) => MonadIO (PlayerT w s m) where
   liftIO m = PlayerT $ \cs -> Eff $ fmap cs (liftIO m)
-  {-# INLINE liftIO #-}
 
 instance Monoid a => Monoid (PlayerT w s m a) where
   mempty = pure mempty
@@ -47,7 +43,6 @@ instance Monoid a => Monoid (PlayerT w s m a) where
 
 runPlayerT :: PlayerT w s m a -> Drive w s m a
 runPlayerT m = unPlayerT m Done
-{-# INLINE runPlayerT #-}
 
 -- | Send a control signal.
 control :: Comonad w => (forall a. w a -> (a, b)) -> PlayerT w s m b

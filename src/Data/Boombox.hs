@@ -20,7 +20,7 @@ infixl 8 >->
   => Tape w m s
   -> PlayerT w s m a
   -> m ([s], Tape w m s, a)
-t0 @-$ p = connectDrive id [] t0 (runPlayerT p)
+t0 @-$ p = connectDrive id (\a b c -> return (a, b, c)) [] t0 (runPlayerT p)
 {-# INLINE (@-$) #-}
 
 type Boombox v w m a = Tape w (PlayerT v a m)
@@ -31,7 +31,7 @@ composeWith :: (Comonad v, Functor w, Monad m, Functor n)
   -> Boombox v w n a b
   -> Tape w m b
 composeWith trans = loop [] where
-  loop lo t (Effect m) = Effect $ (\(a, b, c) -> loop a b c) <$> connectDrive trans lo t (runPlayerT m)
+  loop lo t (Effect m) = Effect $ connectDrive trans (\a b -> return . loop a b) lo t (runPlayerT m)
   loop lo t (Yield b wk) = Yield b $ loop lo t <$> wk
 {-# INLINE composeWith #-}
 
@@ -49,4 +49,5 @@ composeWith trans = loop [] where
 {-# INLINE (>->) #-}
 
 (>-$) :: (Comonad w, Monad m) => Boombox v w m a b -> PlayerT w b m r -> PlayerT v a m r
-t0 >-$ p0 = connectDrive lift [] t0 (runPlayerT p0) >>= \(_, _, a) -> return a
+t0 >-$ p0 = connectDrive lift (\_ _ -> return) [] t0 (runPlayerT p0)
+{-# INLINE (>-$) #-}
