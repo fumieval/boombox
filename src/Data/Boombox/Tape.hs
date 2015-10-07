@@ -5,11 +5,12 @@
 module Data.Boombox.Tape (Tape(..)
   -- * Consuming tapes
   , headTape
-  , unconsTape
   , fastforward
   , cueTape
   -- * Constructing tapes
+  , yield
   , yieldMany
+  , effect
   -- * Transforming tapes
   , flattenTape
   , filterTape
@@ -17,7 +18,6 @@ module Data.Boombox.Tape (Tape(..)
   , hoistTransTape
   , hoistTape
   , transTape
-  , commitTape
   , controlTape
   , pushBack
   , intercept
@@ -36,55 +36,51 @@ import Control.Comonad.Env
 import Control.Comonad.Store
 import Control.Comonad.Traced hiding ((<>))
 import Data.Semigroup
+import Control.Arrow
 
-data Tape w m a = Yield a (w (Tape w m a))
-  | Effect (m (Tape w m a))
+newtype Tape w m a = Tape { unconsTape :: m (a, w (Tape w m a)) }
   deriving (Functor)
 
-headTape :: Monad m => Tape w m a -> m a
-headTape (Yield a _) = return a
-headTape (Effect m) = m >>= headTape
+yield :: Applicative m => a -> w (Tape w m a) -> Tape w m a
+yield a w = Tape $ pure (a, w)
+{-# INLINE yield #-}
 
-unconsTape :: Monad m => Tape w m a -> m (a, w (Tape w m a))
-unconsTape (Yield a w) = return (a, w)
-unconsTape (Effect m) = m >>= unconsTape
+effect :: Monad m => m (Tape w m a) -> Tape w m a
+effect m = Tape $ m >>= unconsTape
+{-# INLINE effect #-}
 
-cueTape :: (Comonad w, Monad m) => Tape w m a -> m (w (Tape w m a))
-cueTape (Yield a w) = return $ extend (Yield a) w
-cueTape (Effect m) = m >>= cueTape
+headTape :: Functor m => Tape w m a -> m a
+headTape = fmap fst . unconsTape
+
+cueTape :: (Comonad w, Applicative m) => Tape w m a -> m (w (Tape w m a))
+cueTape = fmap (\(a, w) -> extend (yield a) w) . unconsTape
 
 fastforward :: (Comonad w, Monad m) => (a -> m x) -> Tape w m a -> m ()
-fastforward k (Yield a w) = k a >> fastforward k (extract w)
-fastforward k (Effect m) = m >>= fastforward k
+fastforward k t = unconsTape t >>= \(a, w) -> k a >> fastforward k (extract w)
 
-flattenTape :: (Comonad w, Foldable f, Functor m) => Tape w m (f a) -> Tape w m a
+flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
 flattenTape = foldTape id
 {-# INLINE flattenTape #-}
 
-foldTape :: (Comonad w, Foldable f, Functor m) => (a -> f b) -> Tape w m a -> Tape w m b
+foldTape :: (Comonad w, Foldable f, Monad m) => (a -> f b) -> Tape w m a -> Tape w m b
 foldTape f = go where
-  go (Yield a w) = yieldMany (f a) (fmap go w)
-  go (Effect m) = Effect (fmap go m)
+  go t = Tape $ unconsTape t >>= \(a, w) -> unconsTape $ yieldMany (f a) (fmap go w)
 {-# INLINE foldTape #-}
 
-filterTape :: (Comonad w, Functor m) => (a -> Bool) -> Tape w m a -> Tape w m a
-filterTape p (Yield a cont)
-  | p a = Yield a (fmap (filterTape p) cont)
-  | otherwise = filterTape p (extract cont)
-filterTape p (Effect m) = Effect $ fmap (filterTape p) m
+filterTape :: (Comonad w, Monad m) => (a -> Bool) -> Tape w m a -> Tape w m a
+filterTape p = go where
+  go t = Tape $ unconsTape t >>= \(a, w) -> if p a then return (a, fmap go w) else unconsTape (go (extract w))
 
-yieldMany :: (Comonad w, Foldable f) => f a -> w (Tape w m a) -> Tape w m a
-yieldMany f w = extract $ foldr (extend . Yield) w f
+yieldMany :: (Comonad w, Foldable f, Applicative m) => f a -> w (Tape w m a) -> Tape w m a
+yieldMany f w = extract $ foldr (extend . yield) w f
 {-# INLINE yieldMany #-}
 
-intercept :: (Functor w, Applicative m) => (a -> m b) -> Tape w m a -> Tape w m b
-intercept k (Effect m) = Effect $ intercept k <$> m
-intercept k (Yield a w) = Effect $ flip Yield (fmap (intercept k) w) <$> k a
+intercept :: (Functor w, Monad m) => (a -> m b) -> Tape w m a -> Tape w m b
+intercept k t = Tape $ unconsTape t >>= \(a, w) -> (\b -> (b, fmap (intercept k) w)) <$> k a
 
 hoistTransTape :: (Functor w, Functor n) => (forall x. v x -> w x) -> (forall x. m x -> n x) -> Tape v m a -> Tape w n a
 hoistTransTape s t = go where
-  go (Yield a w) = Yield a $ fmap go $ s w
-  go (Effect m) = Effect $ fmap go $ t m
+  go (Tape m) = Tape $ fmap (\(a, w) -> (a, fmap go (s w))) (t m)
 {-# INLINE hoistTransTape #-}
 
 hoistTape :: (Functor w, Functor m) => (forall x. v x -> w x) -> Tape v m a -> Tape w m a
@@ -95,16 +91,11 @@ transTape :: (Functor w, Functor n) => (forall x. m x -> n x) -> Tape w m a -> T
 transTape = hoistTransTape id
 {-# INLINE transTape #-}
 
-commitTape :: Functor w => (m (Tape w m a) -> m (Tape w m a)) -> Tape w m a -> Tape w m a
-commitTape t (Effect m) = Effect (t m)
-commitTape t (Yield a w) = Yield a (commitTape t <$> w)
-
 controlTape :: Functor m => (w (Tape w m a) -> w (Tape w m a)) -> Tape w m a -> Tape w m a
-controlTape t (Yield a w) = Yield a (t w)
-controlTape t (Effect m) = Effect $ fmap (controlTape t) m
+controlTape t (Tape m) = Tape $ fmap (second t) m
 
 pushBack :: (Foldable f, Comonad w, Monad m) => f a -> Tape w m a -> Tape w m a
-pushBack f t = Effect $ yieldMany f <$> cueTape t
+pushBack f t = effect $ yieldMany f <$> cueTape t
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where
@@ -141,7 +132,7 @@ instance (Ord i, Chronological w) => Chronological (StoreT i w) where
 
 instance Chronological w => Chronological (TracedT m w) where
   coincidence (TracedT v) (TracedT w) = fmap (TracedT . fmap (uncurry $ liftA2 (,))) $ coincidence v w
-
+{-
 instance (Chronological w, Functor m) => Apply (Tape w m) where
   Yield f0 s0 <.> Yield a0 t0 = Yield (f0 a0) $ case coincidence s0 t0 of
     Simultaneous u -> fmap (uncurry (<.>)) u
@@ -175,7 +166,7 @@ instance (Chronological w, Functor m, Semigroup a) => Semigroup (Tape w m a) whe
 instance (Genesis w, Functor m, Monoid a, Semigroup a) => Monoid (Tape w m a) where
   mempty = creation $ Yield mempty
   mappend = (<>)
-
+-}
 -- | The class of functors which have their own time series.
 class Chronological f => Genesis f where
   creation :: (f r -> r) -> r
@@ -188,7 +179,8 @@ instance Genesis ((->) i) where
 
 instance Genesis w => Genesis (TracedT m w) where
   creation f = creation $ \w -> f $ TracedT (fmap const w)
-
+{-
 instance (Genesis w, Functor m) => Applicative (Tape w m) where
-  pure a = creation $ Yield a
+  pure a = creation $ yield a
   (<*>) = (<.>)
+-}

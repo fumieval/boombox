@@ -18,9 +18,8 @@ instance Ord i => Chronological (Head i) where
     GT -> RightFirst
 
 -- | Seek to an arbitrary position.
-seeksTape :: Functor m => (i -> Maybe i) -> Tape (Head i) m a -> Tape (Head i) m a
-seeksTape t (Yield _ (Head i f)) = f (t i)
-seeksTape t (Effect f) = Effect (fmap (seeksTape t) f)
+seeksTape :: Monad m => (i -> Maybe i) -> Tape (Head i) m a -> Tape (Head i) m a
+seeksTape t (Tape m) = Tape $ m >>= \(_, Head i f) -> unconsTape (f (t i))
 
 seeksP :: (i -> Maybe i) -> PlayerT (Head i) s m ()
 seeksP t = control $ \(Head i f) -> (f (t i), ())

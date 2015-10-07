@@ -31,8 +31,8 @@ composeWith :: (Comonad v, Functor w, Monad m, Functor n)
   -> Boombox v w n a b
   -> Tape w m b
 composeWith trans = loop [] where
-  loop lo t (Effect m) = Effect $ connectDrive trans (\a b -> return . loop a b) lo t (runPlayerT m)
-  loop lo t (Yield b wk) = Yield b $ loop lo t <$> wk
+  loop lo t (Tape m) = Tape $ connectDrive trans
+    (\lo' t' (a, w) -> return (a, fmap (loop lo' t') w)) lo t (runPlayerT m)
 {-# INLINE composeWith #-}
 
 -- | Combine a tape with a boombox. The result will be synchronized with the boombox.

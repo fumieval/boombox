@@ -8,15 +8,15 @@ import qualified Data.ByteString as BS
 import Data.Int
 
 hGetContentsN :: MonadIO m => Int -> IO.Handle -> Tape (Head Int64) m (Maybe BS.ByteString)
-hGetContentsN n h = Effect $ go 0 where
-  go i = do
+hGetContentsN n h = go 0 where
+  go i = Tape $ do
     c <- liftIO $ BS.hGetSome h n
     let l = BS.length c
-    return $ if l <= 0
-      then Yield Nothing $ fmap Effect $ Head i $ maybe (go i) go
-      else Yield (Just c) $ Head i $ maybe
-        (Effect $ go (i + fromIntegral l))
-        (\j -> Effect $ liftIO (IO.hSeek h IO.AbsoluteSeek (fromIntegral j)) >> go j)
+    if l <= 0
+      then return (Nothing, Head i $ maybe (go i) go)
+      else return (Just c, Head i $ maybe
+        (go (i + fromIntegral l))
+        (\j -> Tape $ liftIO (IO.hSeek h IO.AbsoluteSeek (fromIntegral j)) >> unconsTape (go j)))
 
 hGetContents :: MonadIO m => IO.Handle -> Tape (Head Int64) m (Maybe BS.ByteString)
 hGetContents = hGetContentsN 4080

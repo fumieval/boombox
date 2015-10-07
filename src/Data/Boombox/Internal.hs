@@ -24,5 +24,5 @@ connectDrive td cont = loop where
     Eff m -> td m >>= loop lo t
     Cont m -> do
       (a, w) <- unconsTape t
-      m $ extend (loop lo . Yield a) w
+      m $ extend (loop lo . yield a) w
 {-# INLINE connectDrive #-}
