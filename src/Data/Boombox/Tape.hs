@@ -11,6 +11,7 @@ module Data.Boombox.Tape (Tape(..)
   , yield
   , yieldMany
   , effect
+  , repeater
   -- * Transforming tapes
   , flattenTape
   , filterTape
@@ -48,6 +49,9 @@ yield a w = Tape $ pure (a, w)
 effect :: Monad m => m (Tape w m a) -> Tape w m a
 effect m = Tape $ m >>= unconsTape
 {-# INLINE effect #-}
+
+repeater :: (Functor m, Comonad w) => m (w a) -> Tape w m a
+repeater m = Tape $ fmap (\w -> (extract w, repeater m <$ w)) m
 
 headTape :: Functor m => Tape w m a -> m a
 headTape = fmap fst . unconsTape

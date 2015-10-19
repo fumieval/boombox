@@ -45,15 +45,21 @@ runPlayerT :: PlayerT w s m a -> Drive w s m a
 runPlayerT m = unPlayerT m Done
 
 -- | Send a control signal.
-control :: Comonad w => (forall a. w a -> (a, b)) -> PlayerT w s m b
+control :: (forall a. w a -> (a, b)) -> PlayerT w s m b
 control k = PlayerT $ \cs -> Cont $ \wcont -> case k wcont of
   (cont, b) -> cont (cs b)
 
 await :: PlayerT w s m s
 await = PlayerT Partial
+{-# INLINABLE await #-}
 
 leftover :: s -> PlayerT w s m ()
 leftover s = PlayerT $ \cs -> Leftover s (cs ())
+{-# INLINABLE leftover #-}
+
+leftovers :: [s] -> PlayerT w s m ()
+leftovers xs = PlayerT $ \cs -> foldr Leftover (cs ()) xs
+{-# INLINE leftovers #-}
 
 -- | Run a 'PlayerT' action without consuming any input.
 lookAhead :: (Functor w, Functor m) => PlayerT w s m a -> PlayerT w s m a
