@@ -1,13 +1,18 @@
 {-# LANGUAGE RankNTypes #-}
 module Data.Boombox (
    Boombox
+  , (@.$)
   , (@-$), (@->)
   , (>-$), (>->)
   , module Data.Boombox.Tape
-  , module Data.Boombox.Player) where
+  , module Data.Boombox.Player
+  , module Data.Boombox.Combinators
+  , module Data.Boombox.Async) where
 import Data.Boombox.Tape
 import Data.Boombox.Player
 import Data.Boombox.Internal
+import Data.Boombox.Async
+import Data.Boombox.Combinators
 import Control.Comonad
 import Control.Monad.Trans.Class
 
@@ -15,6 +20,13 @@ infix 6 @-$
 infixl 7 @->
 infixr 7 >-$
 infixl 8 >->
+
+(@.$) :: (Comonad w, Monad m)
+  => Tape w m s
+  -> PlayerT w s m a
+  -> m a
+t0 @.$ p = connectDrive id (\_ _ -> return) [] t0 (runPlayerT p)
+{-# INLINE (@.$) #-}
 
 (@-$) :: (Comonad w, Monad m)
   => Tape w m s
