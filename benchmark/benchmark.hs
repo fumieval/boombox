@@ -22,11 +22,6 @@ lines = Effect (go []) where
       [] -> Yield Nothing $ pure $ Effect $ go []
       xs -> Yield (Just (BS.concat (reverse ls))) $ pure $ Effect $ go []
 
-foldlP' :: (r -> s -> r) -> r -> PlayerT w e (Maybe s) m r
-foldlP' f r = await >>= \case
-  Just s -> foldlP' f $! f r s
-  Nothing -> return r
-
 main = do
     [path] <- getArgs
     h <- openFile path ReadMode
