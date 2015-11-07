@@ -21,5 +21,8 @@ instance Ord i => Chronological (Head i) where
 seeksTape :: Monad m => (i -> Maybe i) -> Tape (Head i) m a -> Tape (Head i) m a
 seeksTape t (Tape m) = Tape $ m >>= \(_, Head i f) -> unconsTape (f (t i))
 
+posP :: PlayerT (Head i) s m i
+posP = control $ \(Head i f) -> (f Nothing, i)
+
 seeksP :: (i -> Maybe i) -> PlayerT (Head i) s m ()
 seeksP t = control $ \(Head i f) -> (f (t i), ())

@@ -20,3 +20,6 @@ hGetContentsN n h = go 0 where
 
 hGetContents :: MonadIO m => IO.Handle -> Tape (Head Int64) m (Maybe BS.ByteString)
 hGetContents = hGetContentsN 4080
+
+readFile :: MonadIO m => FilePath -> Tape (Head Int64) m (Maybe BS.ByteString)
+readFile path = effect $ hGetContents <$> liftIO (IO.openFile path IO.ReadMode)
