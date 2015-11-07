@@ -143,8 +143,8 @@ instance (Chronological w, Monad m, Semigroup a) => Semigroup (Tape w m a) where
       (b, w) <- unconsTape t
       case coincidence v w of
           Simultaneous u -> return (a <> b, fmap (uncurry (<>)) u)
-    LeftFirst -> return (a, fmap (<> t) v)
-    RightFirst -> return (b, fmap (s <>) w)
+          LeftFirst -> return (a, fmap (<> t) v)
+          RightFirst -> return (b, fmap (s <>) w)
 
 -- | The class of functors which have their own time series.
 class Chronological f => Genesis f where

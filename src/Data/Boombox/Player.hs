@@ -5,8 +5,6 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.IO.Class
 import Control.Applicative
-import Control.Comonad
-import Data.Functor.Identity
 
 data Drive w s m a = Done a
   | Partial (s -> Drive w s m a)
