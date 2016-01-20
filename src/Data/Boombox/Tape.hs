@@ -5,7 +5,6 @@
 module Data.Boombox.Tape (Tape(..)
   -- * Consuming tapes
   , headTape
-  , fastforward
   , cueTape
   -- * Constructing tapes
   , yield
@@ -25,7 +24,6 @@ module Data.Boombox.Tape (Tape(..)
   -- * Time series
   , Chronological(..)
   , EventOrder(..)
-  , Genesis(..)
   ) where
 
 import Control.Category
@@ -58,9 +56,6 @@ headTape = fmap fst . unconsTape
 
 cueTape :: (Comonad w, Applicative m) => Tape w m a -> m (w (Tape w m a))
 cueTape = fmap (\(a, w) -> extend (yield a) w) . unconsTape
-
-fastforward :: (Comonad w, Monad m) => (a -> m x) -> Tape w m a -> m ()
-fastforward k t = unconsTape t >>= \(a, w) -> k a >> fastforward k (extract w)
 
 flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
 flattenTape = foldTape id
@@ -137,24 +132,12 @@ instance (Ord i, Chronological w) => Chronological (StoreT i w) where
 instance Chronological w => Chronological (TracedT m w) where
   coincidence (TracedT v) (TracedT w) = fmap (TracedT . fmap (uncurry $ liftA2 (,))) $ coincidence v w
 
-instance (Chronological w, Monad m, Semigroup a) => Semigroup (Tape w m a) where
-  s <> t = Tape $ do
+instance (Chronological w, Monad m, Semigroup a)
+  => Semigroup (Tape w m a) where
+    s <> t = Tape $ do
       (a, v) <- unconsTape s
       (b, w) <- unconsTape t
       case coincidence v w of
-          Simultaneous u -> return (a <> b, fmap (uncurry (<>)) u)
-          LeftFirst -> return (a, fmap (<> t) v)
-          RightFirst -> return (b, fmap (s <>) w)
-
--- | The class of functors which have their own time series.
-class Chronological f => Genesis f where
-  creation :: (f r -> r) -> r
-
-instance Genesis Identity where
-  creation f = f (Identity (creation f))
-
-instance Genesis ((->) i) where
-  creation f = f (const (creation f))
-
-instance Genesis w => Genesis (TracedT m w) where
-  creation f = creation $ \w -> f $ TracedT (fmap const w)
+        Simultaneous u -> return (a <> b, fmap (uncurry (<>)) u)
+        LeftFirst -> return (a, fmap (<> t) v)
+        RightFirst -> return (b, fmap (s <>) w)
