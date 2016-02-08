@@ -12,6 +12,7 @@ infixl 7 @->
 infixr 7 >-$
 infixl 8 >->
 
+-- | Feed a tape to a player and extract the final result.
 (@.$) :: (Comonad w, Monad m)
   => Tape w m s
   -> PlayerT w s m a
@@ -19,6 +20,7 @@ infixl 8 >->
 t0 @.$ p = connectDrive id (\_ _ -> return) [] t0 (runPlayerT p)
 {-# INLINE (@.$) #-}
 
+-- | Feed a tape to a player. It returns the leftover input, the remainder of the tape, and the result from the player.
 (@-$) :: (Comonad w, Monad m)
   => Tape w m s
   -> PlayerT w s m a
@@ -26,6 +28,7 @@ t0 @.$ p = connectDrive id (\_ _ -> return) [] t0 (runPlayerT p)
 t0 @-$ p = connectDrive id (\a b c -> return (a, b, c)) [] t0 (runPlayerT p)
 {-# INLINE (@-$) #-}
 
+-- | @'Boombox' v w m a b@ is a transducer from @a@ to @b@ with monadic effect @m@, a comonadic control @v@ (outgoing) and @w@ (incoming).
 type Boombox v w m a = Tape w (PlayerT v a m)
 
 -- | Combine a tape with a boombox. The result will be synchronized with the boombox.
@@ -41,6 +44,7 @@ type Boombox v w m a = Tape w (PlayerT v a m)
 (>->) = composeWith lift
 {-# INLINE (>->) #-}
 
+-- | Connect a boombox to a player.
 (>-$) :: (Comonad w, Monad m) => Boombox v w m a b -> PlayerT w b m r -> PlayerT v a m r
 t0 >-$ p0 = connectDrive lift (\_ _ -> return) [] t0 (runPlayerT p0)
 {-# INLINE (>-$) #-}

@@ -37,6 +37,8 @@ import Control.Comonad.Traced hiding ((<>))
 import Data.Semigroup
 import Control.Arrow
 
+-- | @Tape w m a@ is a producer of values with a type @a@.
+-- It may cause effects @m@ and has a comonadic control @w@.
 newtype Tape w m a = Tape { unconsTape :: m (a, w (Tape w m a)) }
   deriving (Functor)
 
@@ -48,15 +50,19 @@ effect :: Monad m => m (Tape w m a) -> Tape w m a
 effect m = Tape $ m >>= unconsTape
 {-# INLINE effect #-}
 
+-- | Build a tape that yields the same value, with the very same effect and exactly the same control.
 repeater :: (Functor m, Comonad w) => m (w a) -> Tape w m a
 repeater m = Tape $ fmap (\w -> (extract w, repeater m <$ w)) m
 
+-- | Take the first element of the tape.
 headTape :: Functor m => Tape w m a -> m a
 headTape = fmap fst . unconsTape
 
+-- | Denudate the control without dropping a value.
 cueTape :: (Comonad w, Applicative m) => Tape w m a -> m (w (Tape w m a))
 cueTape = fmap (\(a, w) -> extend (yield a) w) . unconsTape
 
+-- | Flatten a tape of 'Foldable' containers.
 flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
 flattenTape = foldTape id
 {-# INLINE flattenTape #-}
@@ -74,6 +80,7 @@ yieldMany :: (Comonad w, Foldable f, Applicative m) => f a -> w (Tape w m a) -> 
 yieldMany f w = extract $ foldr (extend . yield) w f
 {-# INLINE yieldMany #-}
 
+-- | Apply a monadic function to a tape.
 intercept :: (Functor w, Monad m) => (a -> m b) -> Tape w m a -> Tape w m b
 intercept k t = Tape $ unconsTape t >>= \(a, w) -> (\b -> (b, fmap (intercept k) w)) <$> k a
 
@@ -82,17 +89,21 @@ hoistTransTape s t = go where
   go (Tape m) = Tape $ fmap (\(a, w) -> (a, fmap go (s w))) (t m)
 {-# INLINE hoistTransTape #-}
 
+-- | Apply natural transformation to the comonadic control surface.
 hoistTape :: (Functor w, Functor m) => (forall x. v x -> w x) -> Tape v m a -> Tape w m a
 hoistTape t = hoistTransTape t id
 {-# INLINE hoistTape #-}
 
+-- | Transform effects produced by the tape.
 transTape :: (Functor w, Functor n) => (forall x. m x -> n x) -> Tape w m a -> Tape w n a
 transTape = hoistTransTape id
 {-# INLINE transTape #-}
 
+-- | Operate on the control surface just once.
 controlTape :: Functor m => (w (Tape w m a) -> w (Tape w m a)) -> Tape w m a -> Tape w m a
 controlTape t (Tape m) = Tape $ fmap (second t) m
 
+-- | Push some values back to a tape.
 pushBack :: (Foldable f, Comonad w, Monad m) => f a -> Tape w m a -> Tape w m a
 pushBack f t = effect $ yieldMany f <$> cueTape t
 

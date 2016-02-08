@@ -12,6 +12,9 @@ data Drive w s m a = Done a
   | Eff (m (Drive w s m a))
   | Cont (forall r. w (Drive w s m a -> r) -> r)
 
+-- | @'Player' w s m a@ is a monadic consumer of a stream of @s@.
+-- 'Player' may send a control signal parameterized by @w@; the control surface of the producer
+-- (usually 'Tape') should match it.
 newtype PlayerT w s m a = PlayerT { unPlayerT :: forall r. (a -> Drive w s m r) -> Drive w s m r }
 
 instance Functor (PlayerT w s m) where
@@ -47,15 +50,18 @@ control :: (forall a. w a -> (a, b)) -> PlayerT w s m b
 control k = PlayerT $ \cs -> Cont $ \wcont -> case k wcont of
   (cont, b) -> cont (cs b)
 
+-- | Consume a value.
 await :: PlayerT w s m s
 await = PlayerT Partial
 {-# INLINABLE await #-}
 
+-- | Push a leftover back.
 leftover :: s -> PlayerT w s m ()
 leftover s = PlayerT $ \cs -> Leftover s (cs ())
 {-# INLINABLE leftover #-}
 
-leftovers :: [s] -> PlayerT w s m ()
+-- | Put some leftovers.
+leftovers :: Foldable f => f s -> PlayerT w s m ()
 leftovers xs = PlayerT $ \cs -> foldr Leftover (cs ()) xs
 {-# INLINE leftovers #-}
 
