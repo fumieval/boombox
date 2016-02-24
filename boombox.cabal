@@ -20,11 +20,13 @@ library
   exposed-modules:     Data.Boombox
     , Data.Boombox.Async
     , Data.Boombox.Boombox
+    , Data.Boombox.ByteString
     , Data.Boombox.Combinators
     , Data.Boombox.Extra
     , Data.Boombox.Head
     , Data.Boombox.IO
     , Data.Boombox.Player
+    , Data.Boombox.Tap
     , Data.Boombox.Tape
   -- other-modules:
   other-extensions:    BangPatterns, DeriveFunctor
