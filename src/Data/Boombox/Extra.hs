@@ -1,10 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 module Data.Boombox.Extra where
 import Data.Boombox
-import Prelude hiding (takeWhile, dropWhile, lines)
-import qualified Data.ByteString as BS
-import Control.Comonad
-import Data.Functor.Identity
+import Prelude hiding (takeWhile, dropWhile, lines, foldl)
 
 -- | @peek ≡ lookAhead await@
 peek :: PlayerT w a m a
@@ -24,15 +21,17 @@ dropWhile p = do
     then dropWhile p
     else leftover a
 
-lines :: Comonad w => Boombox w Identity IO (Maybe BS.ByteString) (Maybe BS.ByteString)
-lines = Tape (go []) where
-  go ls = await >>= \case
-    Just c -> do
-      let (l, r) = BS.break (==10) c
-      if BS.null r
-        then go (l : ls)
-        else return (Just $ BS.concat $ reverse $ l : ls, pure
-            $ Tape $ leftover (Just (BS.tail r)) >> go [])
-    Nothing -> return $ case ls of
-      [] -> (Nothing, pure $ Tape $ go [])
-      _ -> (Just (BS.concat (reverse ls)), pure $ Tape $ go [])
+foldM :: Monad m => (r -> s -> PlayerT w (Maybe s) m r) -> r -> PlayerT w (Maybe s) m r
+foldM f r = await >>= \case
+  Just s -> f r s >>= foldM f
+  Nothing -> return r
+
+foldl :: Monad m => (r -> s -> r) -> r -> PlayerT w (Maybe s) m r
+foldl f r = await >>= \case
+  Just s -> foldl f $! f r s
+  Nothing -> return r
+
+traverse_ :: Monad m => (s -> PlayerT w (Maybe s) m r) -> PlayerT w (Maybe s) m ()
+traverse_ k = await >>= \case
+  Just s -> k s >> traverse_ k
+  Nothing -> return ()

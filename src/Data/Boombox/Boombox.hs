@@ -29,40 +29,40 @@ t0 @-$ p = connectDrive id (\a b c -> return (a, b, c)) [] t0 (runPlayerT p)
 {-# INLINE (@-$) #-}
 
 -- | @'Boombox' v w m a b@ is a transducer from @a@ to @b@ with monadic effect @m@, a comonadic control @v@ (outgoing) and @w@ (incoming).
-type Boombox v w m a = Tape w (PlayerT v a m)
+type Recorder v w m a = Tape w (PlayerT v a m)
 
 -- | Combine a tape with a boombox. The result will be synchronized with the boombox.
-(@->) :: (Comonad v, Functor w, Monad m) => Tape v m a -> Boombox v w m a b -> Tape w m b
-(@->) = composeWith id
+(@->) :: (Comonad v, Functor w, Monad m) => Tape v m a -> Recorder v w m a b -> Tape w m b
+(@->) = recordWith id
 {-# INLINE (@->) #-}
 
 -- | Connect two boomboxes.
 (>->) :: (Comonad u, Comonad v, Functor w, Monad m)
-  => Boombox u v m a b
-  -> Boombox v w m b c
-  -> Boombox u w m a c
-(>->) = composeWith lift
+  => Recorder u v m a b
+  -> Recorder v w m b c
+  -> Recorder u w m a c
+(>->) = recordWith lift
 {-# INLINE (>->) #-}
 
 -- | Connect a boombox to a player.
-(>-$) :: (Comonad w, Monad m) => Boombox v w m a b -> PlayerT w b m r -> PlayerT v a m r
+(>-$) :: (Comonad w, Monad m) => Recorder v w m a b -> PlayerT w b m r -> PlayerT v a m r
 t0 >-$ p0 = connectDrive lift (\_ _ -> return) [] t0 (runPlayerT p0)
 {-# INLINE (>-$) #-}
 
-composeWith :: (Comonad v, Functor w, Monad m, Functor n)
+recordWith :: (Comonad v, Functor w, Monad m, Functor n)
   => (forall x. n x -> m x)
   -> Tape v m a
-  -> Boombox v w n a b
+  -> Recorder v w n a b
   -> Tape w m b
-composeWith trans = loop [] where
+recordWith trans = loop [] where
   loop lo t (Tape m) = Tape $ connectDrive trans
     (\lo' t' (a, w) -> return (a, loop lo' t' <$> w)) lo t (runPlayerT m)
-{-# INLINE composeWith #-}
+{-# INLINE recordWith #-}
 
 connectDrive :: (Comonad w, Monad m)
   => (forall x. n x -> m x)
-  -> ([s] -> Tape w m s -> a -> m r)
-  -> [s]
+  -> ([s] -> Tape w m s -> a -> m r) -- leftover, leftover tape, result
+  -> [s] -- initial supply
   -> Tape w m s
   -> Drive w s n a
   -> m r
