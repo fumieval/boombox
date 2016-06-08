@@ -24,11 +24,11 @@ seeksTape t (Tape m) = Tape $ m >>= \(_, Head i f) -> unconsTape (f (t i))
 
 -- | Get the current offset.
 posP :: PlayerT (Head i) s m i
-posP = control $ \(Head i f) -> (f Nothing, i)
+posP = control $ \(Head i f) -> (f Nothing, pure i)
 
 -- | Apply the given function to the current offset and jump to the resulting offset.
 seeksP :: (i -> Maybe i) -> PlayerT (Head i) s m ()
-seeksP t = control $ \(Head i f) -> (f (t i), ())
+seeksP t = control $ \(Head i f) -> (f (t i), pure ())
 
 -- | Seek to the given offset.
 seekP :: i -> PlayerT (Head i) s m ()

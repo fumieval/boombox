@@ -46,9 +46,9 @@ runPlayerT :: PlayerT w s m a -> Drive w s m a
 runPlayerT m = unPlayerT m Done
 
 -- | Send a control signal.
-control :: (forall a. w a -> (a, b)) -> PlayerT w s m b
+control :: (forall a. w a -> (a, PlayerT w s m b)) -> PlayerT w s m b
 control k = PlayerT $ \cs -> Cont $ \wcont -> case k wcont of
-  (cont, b) -> cont (cs b)
+  (cont, b) -> cont $ unPlayerT b cs
 
 -- | Consume a value.
 await :: PlayerT w s m s

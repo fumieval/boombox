@@ -30,7 +30,7 @@ awaitByteString n = do
   leftover bs'
   return b
 
-lines :: Comonad w => Recorder w Identity IO (Maybe B.ByteString) (Maybe B.ByteString)
+lines :: Recorder w Identity IO (Maybe B.ByteString) (Maybe B.ByteString)
 lines = Tape (go []) where
   go ls = await >>= \case
     Just c -> do
