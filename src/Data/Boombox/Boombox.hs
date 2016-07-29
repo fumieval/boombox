@@ -45,8 +45,9 @@ type Recorder v w m a = Tape w (PlayerT v a m)
 {-# INLINE (>->) #-}
 
 -- | Connect a boombox to a player.
-(>-$) :: (Comonad w, Monad m) => Recorder v w m a b -> PlayerT w b m r -> PlayerT v a m r
-t0 >-$ p0 = connectDrive lift (\_ _ -> return) [] t0 (runPlayerT p0)
+(>-$) :: (Comonad w, Monad m) => Recorder v w m a b -> PlayerT w b m r
+  -> PlayerT v a m ([b], Recorder v w m a b, r)
+t0 >-$ p0 = connectDrive lift (\a b c -> return (a, b, c)) [] t0 (runPlayerT p0)
 {-# INLINE (>-$) #-}
 
 recordWith :: (Comonad v, Functor w, Monad m, Functor n)

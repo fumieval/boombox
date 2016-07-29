@@ -6,7 +6,6 @@ import qualified Data.ByteString.Internal as B
 import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable
-import Control.Comonad
 import Control.Monad
 import Control.Monad.Trans.Class
 import Data.Boombox.Player
