@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, LambdaCase #-}
 module Data.Boombox.Head where
 import Data.Boombox.Player
 import Data.Boombox.Tape
@@ -10,7 +10,9 @@ data Head i a = Head !i (Maybe i -> a) deriving Functor
 
 instance Comonad (Head i) where
   extract (Head _ f) = f Nothing
-  extend k (Head i f) = Head i $ \m -> k $ Head (maybe i id m) f
+  extend k (Head i f) = Head i $ \case
+    Nothing -> k $ Head i f
+    Just j -> k $ Head j $ f . Just . maybe j id
 
 instance Ord i => Chronological (Head i) where
   coincidence (Head i f) (Head j g) = case compare i j of
