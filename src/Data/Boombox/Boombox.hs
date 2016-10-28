@@ -13,6 +13,7 @@ infixr 7 >-$
 infixl 8 >->
 
 -- | Feed a tape to a player and extract the final result.
+-- The remaining 'Tape' and the unconsumed data will be discarded.
 (@.$) :: (Comonad w, Monad m)
   => Tape w m s
   -> PlayerT w s m a
@@ -37,7 +38,7 @@ type Recorder v w m a = Tape w (PlayerT v a m)
 {-# INLINE (@->) #-}
 
 -- | Connect two boomboxes.
-(>->) :: (Comonad u, Comonad v, Functor w, Monad m)
+(>->) :: (Comonad v, Functor w, Monad m)
   => Recorder u v m a b
   -> Recorder v w m b c
   -> Recorder u w m a c
@@ -50,7 +51,7 @@ type Recorder v w m a = Tape w (PlayerT v a m)
 t0 >-$ p0 = connectDrive lift (\a b c -> return (a, b, c)) [] t0 (runPlayerT p0)
 {-# INLINE (>-$) #-}
 
-recordWith :: (Comonad v, Functor w, Monad m, Functor n)
+recordWith :: (Comonad v, Functor w, Monad m)
   => (forall x. n x -> m x)
   -> Tape v m a
   -> Recorder v w n a b
