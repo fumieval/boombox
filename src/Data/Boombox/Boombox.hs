@@ -1,4 +1,4 @@
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE Rank2Types, LambdaCase #-}
 module Data.Boombox.Boombox where
 
 import Control.Comonad
@@ -82,3 +82,16 @@ connectDrive td cont = loop where
       (a, w) <- unconsTape t
       m $ extend (loop lo . yield a) w
 {-# INLINE connectDrive #-}
+
+recordMaybe :: (Comonad v, Comonad w, Monad m) => Recorder v w m a b -> Recorder v w m (Maybe a) (Maybe b)
+recordMaybe boom = Tape $ go [] $ runPlayerT $ unconsTape boom where
+  go xs (Done (a, wk)) = return (Just a, fmap (Tape . go xs . runPlayerT . unconsTape) wk)
+  go (x:xs) (Partial f) = go xs (f x)
+  go [] (Partial f) = await >>= \case
+      Just a -> go [] (f a)
+      Nothing -> do
+        (b, w) <- unconsTape (recordMaybe boom)
+        return (Nothing, extend (yield b) w)
+  go xs (Leftover x k) = go (x:xs) k
+  go xs (Eff m) = lift m >>= go xs
+  go xs (Cont m) = control $ \w -> m $ fmap (\a d -> (a, go xs d)) w
