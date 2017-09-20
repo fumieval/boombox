@@ -15,7 +15,6 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.Boombox
-    , Data.Boombox.Async
     , Data.Boombox.Boombox
     , Data.Boombox.ByteString
     , Data.Boombox.Extra
