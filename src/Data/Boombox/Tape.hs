@@ -7,9 +7,9 @@ module Data.Boombox.Tape (Tape(..)
   , headTape
   , cueTape
   -- * Constructing tapes
-  , yield
+  , yieldTape
   , yieldMany
-  , effect
+  , effectTape
   , repeater
   -- * Transforming tapes
   , flattenTape
@@ -42,13 +42,13 @@ import Control.Arrow
 newtype Tape w m a = Tape { unconsTape :: m (a, w (Tape w m a)) }
   deriving (Functor)
 
-yield :: Applicative m => a -> w (Tape w m a) -> Tape w m a
-yield a w = Tape $ pure (a, w)
-{-# INLINE yield #-}
+yieldTape :: Applicative m => a -> w (Tape w m a) -> Tape w m a
+yieldTape a w = Tape $ pure (a, w)
+{-# INLINE yieldTape #-}
 
-effect :: Monad m => m (Tape w m a) -> Tape w m a
-effect m = Tape $ m >>= unconsTape
-{-# INLINE effect #-}
+effectTape :: Monad m => m (Tape w m a) -> Tape w m a
+effectTape m = Tape $ m >>= unconsTape
+{-# INLINE effectTape #-}
 
 -- | Build a tape that yields the same value, with the very same effect and exactly the same control.
 repeater :: (Functor m, Comonad w) => m (w a) -> Tape w m a
@@ -60,7 +60,7 @@ headTape = fmap fst . unconsTape
 
 -- | Denudate the control without dropping a value.
 cueTape :: (Comonad w, Applicative m) => Tape w m a -> m (w (Tape w m a))
-cueTape = fmap (\(a, w) -> extend (yield a) w) . unconsTape
+cueTape = fmap (\(a, w) -> extend (yieldTape a) w) . unconsTape
 
 -- | Flatten a tape of 'Foldable' containers.
 flattenTape :: (Comonad w, Foldable f, Monad m) => Tape w m (f a) -> Tape w m a
@@ -77,7 +77,7 @@ filterTape p = go where
   go t = Tape $ unconsTape t >>= \(a, w) -> if p a then return (a, fmap go w) else unconsTape (go (extract w))
 
 yieldMany :: (Comonad w, Foldable f, Applicative m) => f a -> w (Tape w m a) -> Tape w m a
-yieldMany f w = extract $ foldr (extend . yield) w f
+yieldMany f w = extract $ foldr (extend . yieldTape) w f
 {-# INLINE yieldMany #-}
 
 -- | Apply a monadic function to a tape.
@@ -105,7 +105,7 @@ controlTape t (Tape m) = Tape $ fmap (second t) m
 
 -- | Push some values back to a tape.
 pushBack :: (Foldable f, Comonad w, Monad m) => f a -> Tape w m a -> Tape w m a
-pushBack f t = effect $ yieldMany f <$> cueTape t
+pushBack f t = effectTape $ yieldMany f <$> cueTape t
 
 -- | 'Chronological' functor is like 'Apply', but the operation may fail due to a time lag.
 class Functor f => Chronological f where

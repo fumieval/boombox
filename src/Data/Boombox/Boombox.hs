@@ -80,7 +80,7 @@ connectDrive td cont = loop where
     Eff m -> td m >>= loop lo t
     Cont m -> do
       (a, w) <- unconsTape t
-      m $ extend (loop lo . yield a) w
+      m $ extend (loop lo . yieldTape a) w
 {-# INLINE connectDrive #-}
 
 recordMaybe :: (Functor v, Comonad w, Monad m) => Recorder v w m a b -> Recorder v w m (Maybe a) (Maybe b)
@@ -91,7 +91,7 @@ recordMaybe boom = Tape $ go [] $ runPlayerT $ unconsTape boom where
       Just a -> go [] (f a)
       Nothing -> do
         (b, w) <- unconsTape (recordMaybe boom)
-        return (Nothing, extend (yield b) w)
+        return (Nothing, extend (yieldTape b) w)
   go xs (Leftover x k) = go (x:xs) k
   go xs (Eff m) = lift m >>= go xs
   go xs (Cont m) = control $ \w -> m $ fmap (\a d -> (a, go xs d)) w

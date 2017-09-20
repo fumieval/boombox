@@ -22,4 +22,4 @@ hGetContents :: MonadIO m => IO.Handle -> Tape (Head Int64) m (Maybe BS.ByteStri
 hGetContents = hGetContentsN 4080
 
 readFile :: MonadIO m => FilePath -> Tape (Head Int64) m (Maybe BS.ByteString)
-readFile path = effect $ hGetContents <$> liftIO (IO.openFile path IO.ReadMode)
+readFile path = effectTape $ hGetContents <$> liftIO (IO.openFile path IO.ReadMode)

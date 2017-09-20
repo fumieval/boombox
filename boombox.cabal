@@ -20,6 +20,7 @@ library
     , Data.Boombox.Extra
     , Data.Boombox.Head
     , Data.Boombox.IO
+    , Data.Boombox.Jam
     , Data.Boombox.Player
     , Data.Boombox.Tap
     , Data.Boombox.Tape
